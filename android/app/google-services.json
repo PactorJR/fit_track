@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "435363878173",
+    "firebase_url": "https://fittrack-ccat-default-rtdb.firebaseio.com",
+    "project_id": "fittrack-ccat",
+    "storage_bucket": "fittrack-ccat.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:435363878173:android:fda63038c9ae5217fbfdf4",
+        "android_client_info": {
+          "package_name": "com.ccat.fit_track"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "435363878173-sv6v58fqadb0kb734j2lgqlmjo8gm7jt.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBy0NSEApL4P2xKnSSkfW9zHdnTEEuOGY4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "435363878173-sv6v58fqadb0kb734j2lgqlmjo8gm7jt.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "435363878173-revgnaokcgp9i6vulo04crlfttotupl9.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.ccat.fitTrack"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
