@@ -9,6 +9,7 @@ import 'main.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,6 +35,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
+
 class LoginPage extends StatefulWidget {
   @override
   _LoginPageState createState() => _LoginPageState();
@@ -46,6 +48,8 @@ class _LoginPageState extends State<LoginPage> {
   bool _obscurePassword = true; // Variable to manage the visibility state of the password
   bool _isLoading = false; // Loading state
   String errorMessage = ''; // Variable to hold error messages
+  bool _rememberMe = false; // Track whether the user selects "Remember Me"
+  final FlutterSecureStorage storage = FlutterSecureStorage();
 
   // Method to toggle password visibility
   void _togglePasswordVisibility() {
@@ -53,6 +57,52 @@ class _LoginPageState extends State<LoginPage> {
       _obscurePassword = !_obscurePassword;
     });
   }
+
+  @override
+  void initState() {
+    super.initState();
+    _checkRememberMe();
+  }
+
+  Future<void> _checkRememberMe() async {
+    String? value = await storage.read(key: 'isRemembered');
+    if (value == 'true') {
+      // Proceed to check if the user is logged in or auto-login logic
+      User? user = FirebaseAuth.instance.currentUser;
+
+      if (user != null) {
+        // Get user status from Firestore
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection(
+            'users').doc(user.uid).get();
+        String userStatus = userDoc['userStatus'];
+
+        // Check if user is "Active"
+        if (userStatus == 'Active') {
+          String userType = userDoc['userType'];
+
+          // Navigate to the appropriate home page based on user type
+          if (userType == 'Admin') {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) =>
+                  MyAdminHomePage(title: 'FitTrack Home')),
+            );
+          } else {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => MyHomePage(title: 'Home')),
+            );
+          }
+        } else {
+          // Handle if the user status is not "Active"
+          FirebaseAuth.instance
+              .signOut(); // Sign out the user if status is not active
+        }
+      }
+    }
+  }
+
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) {
@@ -65,10 +115,16 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       // Attempt to sign in with email and password
-      UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(
         email: _emailController.text,
         password: _passwordController.text,
       );
+
+      // Store the "remember me" status securely
+      if (_rememberMe) {
+        await storage.write(key: 'isRemembered', value: 'true');
+      }
 
       // Check if the user exists in Firestore
       DocumentSnapshot userDoc = await FirebaseFirestore.instance
@@ -85,40 +141,56 @@ class _LoginPageState extends State<LoginPage> {
           // Show a dialog to inform the user they are on approval
           showDialog(
             context: context,
-            builder: (context) => AlertDialog(
-              title: Text('Approval Pending'),
-              content: Text('Your account is pending approval by an Admin. Please wait until your account is set to active.'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text('OK'),
+            builder: (context) =>
+                AlertDialog(
+                  title: Text('Approval Pending'),
+                  content: Text(
+                      'Your account is pending approval by an Admin. Please wait until your account is set to active.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text('OK'),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+          );
+        } else if (userStatus == 'Banned') {
+          // Show a dialog to inform the user they are on approval
+          showDialog(
+            context: context,
+            builder: (context) =>
+                AlertDialog(
+                  title: Text('Approval Pending'),
+                  content: Text(
+                      'Your account is banned by an Admin. Please contact an admin official of FitTrack to resolve your problem.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text('OK'),
+                    ),
+                  ],
+                ),
           );
         } else {
           // Get the current date and time and format it
-          String formattedDateTime = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
-
-          // Update lastLogin field in Firestore
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(userCredential.user!.uid)
-              .update({'lastLogin': formattedDateTime});
+          String formattedDateTime = DateFormat('yyyy-MM-dd HH:mm:ss').format(
+              DateTime.now());
 
           // Navigate to appropriate page based on userType
           if (userType == 'Admin') {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
-                builder: (context) => MyAdminHomePage(title: 'FitTrack Home'), // Replace with your admin dashboard page
+                builder: (context) =>
+                    MyAdminHomePage(
+                        title: 'FitTrack Home'), // Replace with your admin dashboard page
               ),
             );
           } else {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
-                builder: (context) => MyHomePage(title: 'FitTrack Home'),
+                builder: (context) => MyHomePage(title: 'Home'),
               ),
             );
           }
@@ -131,7 +203,7 @@ class _LoginPageState extends State<LoginPage> {
       }
     } catch (e) {
       setState(() {
-        errorMessage = e.toString();
+        errorMessage = 'Wrong username or password!';
       });
     } finally {
       setState(() {
@@ -142,195 +214,244 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Background image
-          Container(
-            decoration: BoxDecoration(
-              image: DecorationImage(
-                image: AssetImage('assets/images/bg.png'), // Replace with your actual background image path.
-                fit: BoxFit.cover,
+    return WillPopScope(
+      onWillPop: () async {
+        // Prevent going back to the previous screen after logout
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => MyAppMain()),
+          // Navigate to MyAppMain after logout
+              (Route<
+              dynamic> route) => false, // Remove all previous routes from the stack
+        );
+        return Future.value(false); // Prevent default back action
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            // Background image
+            Container(
+              decoration: BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage('assets/images/bg.png'),
+                  // Replace with your actual background image path
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
-          ),
 
-          // Login Form Content
-          SafeArea(
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  // Logo and Title
-                  Column(
-                    children: [
-                      SizedBox(height: 50), // Added space from the top
-                      Image.asset(
-                        'assets/images/FitTrack_Icon.png', // Replace with the actual image path for your logo.
-                        height: 250,
-                      ),
-                    ],
-                  ),
+            // Login Form Content
+            SafeArea(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    // Logo and Title
+                    Column(
+                      children: [
+                        SizedBox(height: 50), // Added space from the top
+                        Image.asset(
+                          'assets/images/FitTrack_Icon.png',
+                          // Replace with the actual image path for your logo
+                          height: 250,
+                        ),
+                      ],
+                    ),
 
-                  // Email and Password input fields
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 32.0),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        children: [
-                          TextFormField(
-                            controller: _emailController,
-                            decoration: InputDecoration(
-                              hintText: 'Enter email',
-                              filled: true,
-                              fillColor: Colors.white.withOpacity(0.8), // Make it slightly transparent
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(30),
-                                borderSide: BorderSide(color: Colors.green),
-                              ),
-                            ),
-                            keyboardType: TextInputType.emailAddress,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your email';
-                              }
-                              return null;
-                            },
-                          ),
-                          SizedBox(height: 20),
-                          TextFormField(
-                            controller: _passwordController,
-                            obscureText: _obscurePassword, // Toggles between showing and hiding the password
-                            decoration: InputDecoration(
-                              hintText: 'Enter password',
-                              filled: true,
-                              fillColor: Colors.white.withOpacity(0.8), // Make it slightly transparent
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                    // Email and Password input fields
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          children: [
+                            TextFormField(
+                              controller: _emailController,
+                              decoration: InputDecoration(
+                                hintText: 'Enter email',
+                                filled: true,
+                                fillColor: Colors.white.withOpacity(0.8),
+                                // Make it slightly transparent
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(30),
+                                  borderSide: BorderSide(color: Colors.green),
                                 ),
-                                onPressed: _togglePasswordVisibility, // Toggles visibility when the icon is tapped
                               ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(30),
-                                borderSide: BorderSide(color: Colors.green),
-                              ),
+                              keyboardType: TextInputType.emailAddress,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please enter your email';
+                                }
+                                return null;
+                              },
                             ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your password';
-                              }
-                              return null;
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Error Message
-                  if (errorMessage.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8.0),
-                      child: Text(
-                        errorMessage,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ),
-
-                  // Loading Indicator or Login Button
-                  if (_isLoading)
-                    Center(
-                      child: CircularProgressIndicator(), // Loading indicator
-                    )
-                  else
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16.0), // Space between fields and button
-                      child: ElevatedButton(
-                        onPressed: _login,
-                        style: ElevatedButton.styleFrom(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          backgroundColor: Colors.green,
-                          padding: EdgeInsets.symmetric(horizontal: 80, vertical: 15),
-                        ),
-                        child: Text(
-                          'Login',
-                          style: const TextStyle(
-                            color: Colors.black,
-                          ),
+                            SizedBox(height: 20),
+                            TextFormField(
+                              controller: _passwordController,
+                              obscureText: _obscurePassword,
+                              // Toggles between showing and hiding the password
+                              decoration: InputDecoration(
+                                hintText: 'Enter password',
+                                filled: true,
+                                fillColor: Colors.white.withOpacity(0.8),
+                                // Make it slightly transparent
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscurePassword ? Icons.visibility : Icons
+                                        .visibility_off,
+                                  ),
+                                  onPressed: _togglePasswordVisibility, // Toggles visibility when the icon is tapped
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(30),
+                                  borderSide: BorderSide(color: Colors.green),
+                                ),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please enter your password';
+                                }
+                                return null;
+                              },
+                            ),
+                          ],
                         ),
                       ),
                     ),
 
-                  // Register and Guest Links
-                  Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 16.0), // Space between text and button
-                        child: Text("Don't have an account yet?"),
-                      ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                    // Remember Me Checkbox
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                      child: Row(
                         children: [
-                          TextButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => RegisterPage()), // Navigate to RegisterPage
-                              );
+                          Checkbox(
+                            value: _rememberMe,
+                            onChanged: (value) {
+                              setState(() {
+                                _rememberMe = value!;
+                              });
                             },
-                            child: Text(
-                              'Register here',
-                              style: const TextStyle(
-                                color: Colors.blue,
-                              ),
-                            ),
                           ),
-                          Text('or'),
-                          TextButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => GuestPage()), // Navigate to GuestPage
-                              );
-                            },
-                            child: Text(
-                              'Continue as a Guest',
-                              style: const TextStyle(
-                                color: Colors.blue,
-                              ),
-                            ),
-                          ),
+                          Text("Remember Me"),
                         ],
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+
+                    // Error Message
+                    if (errorMessage.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Text(
+                          errorMessage,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      ),
+
+                    // Loading Indicator or Login Button
+                    if (_isLoading)
+                      Center(
+                        child: CircularProgressIndicator(), // Loading indicator
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16.0),
+                        // Space between fields and button
+                        child: ElevatedButton(
+                          onPressed: _login,
+                          style: ElevatedButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            backgroundColor: Colors.green,
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 80, vertical: 15),
+                          ),
+                          child: Text(
+                            'Login',
+                            style: const TextStyle(
+                              color: Colors.black,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    // Register and Guest Links
+                    Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16.0),
+                          // Space between text and button
+                          child: Text("Don't have an account yet?"),
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            TextButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) =>
+                                      RegisterPage()), // Navigate to RegisterPage
+                                );
+                              },
+                              child: Text(
+                                'Register here',
+                                style: const TextStyle(
+                                  color: Colors.blue,
+                                ),
+                              ),
+                            ),
+                            Text('or'),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) =>
+                                      GuestPage()), // Navigate to GuestPage
+                                );
+                              },
+                              child: Text(
+                                'Continue as a Guest',
+                                style: const TextStyle(
+                                  color: Colors.blue,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
 
-          // Permanent Floating Back Button
-          Positioned(
-            top: 40, // Position the button at the top
-            left: 20, // Align to the left
-            child: FloatingActionButton(
-              mini: true, // Smaller back button
-              backgroundColor: Colors.green,
-              onPressed: () {
-                // Navigate to MainPage
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => MyAppMain()),
-                );
-              },
-              child: const Icon(Icons.arrow_back, color: Colors.black),
+            // Permanent Floating Back Button
+            Positioned(
+              top: 40, // Position the button at the top
+              left: 20, // Align to the left
+              child: FloatingActionButton(
+                mini: true, // Smaller back button
+                backgroundColor: Colors.green,
+                onPressed: () async {
+                  // Log out the user before navigating to MyAppMain
+                  await FirebaseAuth.instance
+                      .signOut(); // Log the user out of Firebase
+
+                  // Also clear the "Remember Me" storage if needed
+                  await storage.delete(key: 'isRemembered');
+
+                  // Navigate to MainPage
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => MyAppMain()),
+                  );
+                },
+                child: const Icon(Icons.arrow_back, color: Colors.black),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

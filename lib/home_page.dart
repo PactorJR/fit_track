@@ -9,7 +9,6 @@ import 'cash_in.dart';
 import 'profile.dart';
 import 'history.dart';
 import 'alerts.dart';
-
 import 'scan_qr.dart';
 
 void main() async {
@@ -30,15 +29,16 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Home'),
+      home: const MyHomePage(title:'Home'),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
 
-  final String title;
+class MyHomePage extends StatefulWidget {
+  final String title; // Add title as a final field
+
+  const MyHomePage({super.key, required this.title});  // Make sure to pass title
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
@@ -47,7 +47,7 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   int _selectedBottomNavIndex = 0;
   int _drawerIndex = -1;
-  String _currentTitle;
+  String _currentTitle = 'Home';  // Initialize with a default title
   late bool _isDarkMode;
 
   void _toggleTheme(bool isDark) {
@@ -56,12 +56,14 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  _MyHomePageState() : _currentTitle = 'Home';
-
   @override
   void initState() {
     super.initState();
     _isDarkMode = false;
+    // If the title is 'Alerts', set the bottom navigation index to 1
+    if (_currentTitle == 'Alerts') {
+      _onBottomNavTapped(1);  // Automatically select Alerts tab
+    }
   }
 
   @override
@@ -86,91 +88,98 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
     ];
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.green.shade200,
-        automaticallyImplyLeading: false,
-        title: Row(
-          children: [
-            Image.asset(
-              'assets/images/FitTrack_Icon.png',
-              width: 40,
-              height: 40,
-            ),
-            SizedBox(width: 8),
-            Text(_currentTitle),
-          ],
-        ),
-      ),
-      body: _drawerIndex == -1
-          ? _bottomNavPages[_selectedBottomNavIndex]
-          : _drawerPages[_drawerIndex],
-      bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 10,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+    return WillPopScope(
+      onWillPop: () async {
+        return false;  // Prevent default back navigation
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        appBar: AppBar(
+          backgroundColor: Colors.green.shade200,
+          automaticallyImplyLeading: false,
+          title: Row(
             children: [
-              Expanded(
-                child: IconButton(
-                  icon: Icon(Icons.home, size: 20),
-                  color: _selectedBottomNavIndex == 0 ? Colors.green : Colors.grey,
-                  onPressed: () {
-                    _onBottomNavTapped(0);
-                  },
-                ),
+              Image.asset(
+                'assets/images/FitTrack_Icon.png',
+                width: 40,
+                height: 40,
               ),
-              Expanded(
-                child: IconButton(
-                  icon: Icon(Icons.notifications, size: 20),
-                  color: _selectedBottomNavIndex == 1 ? Colors.green : Colors.grey,
-                  onPressed: () {
-                    _onBottomNavTapped(1);
-                  },
-                ),
-              ),
-              SizedBox(width: 40), // Space for FAB
-              Expanded(
-                child: IconButton(
-                  icon: Icon(Icons.history, size: 20),
-                  color: _selectedBottomNavIndex == 2 ? Colors.green : Colors.grey,
-                  onPressed: () {
-                    _onBottomNavTapped(2);
-                  },
-                ),
-              ),
-              Expanded(
-                child: IconButton(
-                  icon: Icon(Icons.menu, size: 20),
-                  color: _selectedBottomNavIndex == 3 ? Colors.green : Colors.grey,
-                  onPressed: () {
-                    _onBottomNavTapped(3);
-                  },
-                ),
-              ),
+              SizedBox(width: 8),
+              Text(_currentTitle),  // Use the mutable _currentTitle variable
             ],
           ),
         ),
-      ),
-      floatingActionButton: SizedBox(
-        height: 100.0,
-        width: 100.0,
-        child: RawMaterialButton(
-          onPressed: () {
-            setState(() {});
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => ScanPage()),
-            );
-          },
-          shape: const CircleBorder(),
-          fillColor: Colors.white,
-          child: const Icon(Icons.qr_code_scanner, size: 50, color: Colors.green),
+        body: _drawerIndex == -1
+            ? _bottomNavPages[_selectedBottomNavIndex]
+            : _drawerPages[_drawerIndex],
+        bottomNavigationBar: BottomAppBar(
+          shape: const CircularNotchedRectangle(),
+          notchMargin: 10,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Expanded(
+                  child: IconButton(
+                    icon: Icon(Icons.home, size: 20),
+                    color: _selectedBottomNavIndex == 0 ? Colors.green : Colors.grey,
+                    onPressed: () {
+                      _onBottomNavTapped(0);
+                    },
+                  ),
+                ),
+                Expanded(
+                  child: IconButton(
+                    icon: Icon(Icons.notifications, size: 20),
+                    color: _selectedBottomNavIndex == 1 ? Colors.green : Colors.grey,
+                    onPressed: () {
+                      _onBottomNavTapped(1);
+                    },
+                  ),
+                ),
+                SizedBox(width: 40),  // Space for FAB
+                Expanded(
+                  child: IconButton(
+                    icon: Icon(Icons.history, size: 20),
+                    color: _selectedBottomNavIndex == 2 ? Colors.green : Colors.grey,
+                    onPressed: () {
+                      _onBottomNavTapped(2);
+                    },
+                  ),
+                ),
+                Expanded(
+                  child: IconButton(
+                    icon: Icon(Icons.menu, size: 20),
+                    color: _selectedBottomNavIndex == 3 ? Colors.green : Colors.grey,
+                    onPressed: () {
+                      _onBottomNavTapped(3);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
+        floatingActionButton: SizedBox(
+          height: 100.0,
+          width: 100.0,
+          child: RawMaterialButton(
+            onPressed: () {
+              setState(() {});
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => ScanPage()),
+              );
+            },
+            shape: const CircleBorder(),
+            fillColor: Colors.white,
+            child: const Icon(
+                Icons.qr_code_scanner, size: 50, color: Colors.green),
+          ),
+        ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
 
@@ -185,19 +194,19 @@ class _MyHomePageState extends State<MyHomePage> {
   void _updateTitleBasedOnIndex(int index) {
     switch (index) {
       case 0:
-        _currentTitle = 'Home';
+        _currentTitle = 'Home';  // Update _currentTitle
         break;
       case 1:
-        _currentTitle = 'Alerts';
+        _currentTitle = 'Alerts'; // Update _currentTitle// Set _drawerIndex to 1 when the title is 'Alerts'
         break;
       case 2:
-        _currentTitle = 'History';
+        _currentTitle = 'History';  // Update _currentTitle
         break;
       case 3:
-        _currentTitle = 'Menu';
+        _currentTitle = 'Menu';  // Update _currentTitle
         break;
       default:
-        _currentTitle = 'FitTrack';
+        _currentTitle = 'FitTrack';  // Update _currentTitle
         break;
     }
   }
@@ -213,19 +222,30 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 }
 
-
-
 class HomePage extends StatefulWidget {
   @override
   _HomePageState createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
+  final PageController _pageController = PageController();
+  int _currentIndex = 0;
   User? _user;
   DocumentSnapshot? _userData;
 
-  // Flag to track whether more images should be shown
-  bool _showMoreImages = false;
+  final imagePaths = [
+    'assets/images/image1.png',
+    'assets/images/image2.png',
+    'assets/images/image3.png',
+    'assets/images/image4.png',
+  ];
+
+  final imageDescriptions = [
+    "Don't forget to drink water",
+    "Clean as you go",
+    "Do proper form",
+    "Close windows when done",
+  ];
 
   @override
   void initState() {
@@ -383,8 +403,7 @@ class _HomePageState extends State<HomePage> {
                 SizedBox(height: 20), // Space between the containers
                 // New container 1 with images
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 20.0, horizontal: 24.0),
+                  padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 24.0),
                   decoration: BoxDecoration(
                     color: Colors.green.shade800.withOpacity(0.8),
                     borderRadius: BorderRadius.circular(20),
@@ -400,40 +419,69 @@ class _HomePageState extends State<HomePage> {
                   child: Column(
                     children: [
                       Text(
-                        "Become a Member",
-                        style: TextStyle(
-                            fontSize: 24, fontWeight: FontWeight.bold),
+                        "Always remember to..",
+                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w100),
+                        textAlign: TextAlign.center,
                       ),
                       SizedBox(height: 10),
-                      // Grid for showing images
-                      GridView.count(
-                        crossAxisCount: 2,
-                        shrinkWrap: true,
-                        physics: NeverScrollableScrollPhysics(),
-                        children: [
-                          _buildImageContainer('assets/images/image1.png'),
-                          _buildImageContainer('assets/images/image2.png'),
-                          _buildImageContainer('assets/images/image3.png'),
-                          _buildImageContainer('assets/images/image4.png'),
-                          if (_showMoreImages) ...[
-                            _buildImageContainer('assets/images/image5.png'),
-                            _buildImageContainer('assets/images/image6.png'),
-                          ],
-                        ],
-                      ),
-                      SizedBox(height: 10),
-                      // Button to show more images
-                      TextButton(
-                        onPressed: () {
-                          setState(() {
-                            _showMoreImages = !_showMoreImages;
-                          });
-                        },
-                        child: Text(
-                          _showMoreImages ? "Show Less" : "Show More",
-                          style: TextStyle(color: Colors.white),
+                      // Swipable PageView for images with text below each image
+                      SizedBox(
+                        height: 400,
+                        child: PageView.builder(
+                          controller: _pageController,
+                          itemCount: imagePaths.length,
+                          onPageChanged: (index) {
+                            setState(() {
+                              _currentIndex = index;
+                            });
+                          },
+                          itemBuilder: (context, index) {
+                            return Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                // Display image
+                                Image.asset(
+                                  imagePaths[index],
+                                  fit: BoxFit.cover, // Ensure the image fits well
+                                  height: 300, // You can adjust the height as needed
+                                ),
+                                SizedBox(height: 10),
+                                // Custom text below the image for each one
+                                Text(
+                                  imageDescriptions[index], // Use description based on index
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ),
+                      SizedBox(height: 10),
+                      // Dots indicator for the current page
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(
+                          imagePaths.length,
+                              (index) => AnimatedContainer(
+                            duration: Duration(milliseconds: 300),
+                            margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                            height: 8,
+                            width: _currentIndex == index ? 16 : 8,
+                            decoration: BoxDecoration(
+                              color: _currentIndex == index
+                                  ? Colors.white
+                                  : Colors.white.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 10),
                     ],
                   ),
                 ),

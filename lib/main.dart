@@ -5,6 +5,12 @@ import 'package:firebase_core/firebase_core.dart';
 import 'login.dart';
 import 'register.dart';
 import 'guest.dart';
+import 'home_page.dart';
+import 'home_page_admin.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +26,26 @@ class MyAppMain extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+        theme: ThemeData(
+          primarySwatch: Colors.green,
+          inputDecorationTheme: InputDecorationTheme(
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8.0),
+              borderSide: BorderSide(color: Colors.grey), // Default border color
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8.0),
+              borderSide: BorderSide(color: Colors.green), // Border color when focused
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8.0),
+              borderSide: BorderSide(color: Colors.grey), // Border color when not focused
+            ),
+            floatingLabelStyle: TextStyle(
+              color: Colors.green, // Label color when focused
+            ),
+          ),
+        ),
       home: OpeningPage(),
       routes: {
         '/login': (context) => LoginPage(), // Define route for login
@@ -36,6 +62,41 @@ class OpeningPage extends StatefulWidget {
 }
 
 class _SplashPageState extends State<OpeningPage> {
+  bool _rememberMe = false; // Track whether the user selects "Remember Me"
+  final FlutterSecureStorage storage = FlutterSecureStorage();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkRememberMe();
+  }
+
+  Future<void> _checkRememberMe() async {
+    String? value = await storage.read(key: 'isRemembered');
+    if (value == 'true') {
+      // Proceed to check if the user is logged in or auto-login logic
+      User? user = FirebaseAuth.instance.currentUser;
+
+      if (user != null) {
+        // User is already logged in, navigate to the appropriate home page
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        String userType = userDoc['userType'];
+
+        if (userType == 'Admin') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => MyAdminHomePage(title: 'FitTrack Home')),
+          );
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => MyHomePage(title:'Home')),
+          );
+        }
+      }
+    }
+  }
+
   final PageController _controller = PageController();
   int _currentPage = 0;
 

@@ -128,7 +128,7 @@ class MenuAdminPage extends StatelessWidget {
                 SizedBox(height: 20),
                 // Menu Items Section
                 _buildMenuItem(context, icon: Icons.qr_code, label: "Scan QR", page: ScanPage()),
-                _buildMenuItem(context, icon: Icons.people, label: "Users", page: UsersAdminPage()),
+                _buildMenuItem(context, icon: Icons.people, label: "Users", page: UsersAdminPage(userId: 'defaultUserId')),
                 _buildMenuItem(context, icon: Icons.person, label: "Profile", page: ProfilePage()),
                 _buildMenuItem(context, icon: Icons.table_view, label: "Graphs", page: GraphsAdminPage()), // Ensure this is defined
                 _buildMenuItem(context, icon: Icons.settings, label: "Settings", page: SettingsPage(

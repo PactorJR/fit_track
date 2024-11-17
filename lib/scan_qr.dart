@@ -21,6 +21,7 @@ class _QRScannerState extends State<ScanPage> {
   String _result = '';
   bool _hasLoggedIn = false;
   Timer? _debounce;
+  DateTime? _lastScanTime;
   late WebViewController _webViewController;  // Define WebViewController for WebView widget
 
   @override
@@ -62,7 +63,7 @@ class _QRScannerState extends State<ScanPage> {
                     Text(
                       _result.isEmpty
                           ? 'Scan a QR code'
-                          : 'Scanned Successfully, Remove the focus of Camera from QR to Proceed',
+                          : 'Scanned Successfully',
                       style: TextStyle(fontSize: 20),
                       textAlign: TextAlign.center,
                     ),
@@ -89,6 +90,13 @@ class _QRScannerState extends State<ScanPage> {
 
   }
 
+  void _proceedToSignOut() {
+    // Sign out logic (e.g., FirebaseAuth sign-out)
+    FirebaseAuth.instance.signOut();
+
+    // Navigate to login or home page
+    Navigator.pushReplacementNamed(context, '/login'); // or wherever you want to navigate
+  }
 
   void _onQRViewCreated(QRViewController controller) {
     setState(() {
@@ -106,10 +114,34 @@ class _QRScannerState extends State<ScanPage> {
         User? user = FirebaseAuth.instance.currentUser;
         if (user == null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("No user logged in")),
+            SnackBar(content: Text("No user logged in"),
+              behavior: SnackBarBehavior.floating, // Floating snackbar
+              duration: Duration(seconds: 2),
+            ),
+
           );
           return;
         }
+
+        // Get user data from Firestore
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+
+        if (!userDoc.exists) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("User document not found"),
+              behavior: SnackBarBehavior.floating, // Floating snackbar
+              duration: Duration(seconds: 2),
+            ),
+          );
+          return;
+        }
+
+        String firstName = userDoc['firstName'] ?? 'Unknown';
+        String lastName = userDoc['lastName'] ?? 'Unknown';
+        String userType = userDoc['userType'] ?? 'User'; // Get userType
 
         if (code == "https://youtu.be/yWnacRo2VbA?si=S8JUbMKu-0lAFctJ") {
           // Launch the YouTube video URL
@@ -126,152 +158,336 @@ class _QRScannerState extends State<ScanPage> {
           return;
         }
 
-        // Get user data from Firestore
-        DocumentSnapshot userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
-
-        if (!userDoc.exists) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("User document not found")),
-          );
-          return;
-        }
-
-        String firstName = userDoc['firstName'] ?? 'Unknown';
-        String lastName = userDoc['lastName'] ?? 'Unknown';
-        String userType = userDoc['userType'] ?? 'User'; // Get userType
-
-        // Check if the scanned code is for login
         if (code.contains("http://www.FitTrack_Login.com")) {
-          // Check if the user is already logged in
-          QuerySnapshot loginRecord = await FirebaseFirestore.instance
-              .collection('logintime')
-              .where('userID', isEqualTo: user.uid)
-              .orderBy('scannedTime', descending: true)
-              .limit(1)
-              .get();
-
-          if (loginRecord.docs.isNotEmpty) {
-            DocumentSnapshot lastRecord = loginRecord.docs.first;
-            bool loggedOut = lastRecord['loggedOut'] ?? true;
-
-            if (!loggedOut) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text("You are already logged in!")),
-              );
-            } else {
-              // Log the user in if they are logged out
-              await _logUserLogin(user.uid, firstName, lastName);
-            }
-          } else {
-            // No previous login record found; log the user in
-            await _logUserLogin(user.uid, firstName, lastName);
-          }
+          _handleLogin(user, firstName, lastName);
         } else if (code.contains("http://www.FitTrack_Logout.com")) {
-          // Check the most recent login record for logout logic
-          QuerySnapshot loginRecord = await FirebaseFirestore.instance
-              .collection('logintime')
-              .where('userID', isEqualTo: user.uid)
-              .orderBy('scannedTime', descending: true)
-              .limit(1)
-              .get();
-
-          if (loginRecord.docs.isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("No login records found")),
-            );
-            return;
-          }
-
-          DocumentSnapshot lastRecord = loginRecord.docs.first;
-          bool loggedOut = lastRecord['loggedOut'] ?? true;
-
-          if (loggedOut) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("You are already logged out!")),
-            );
-          } else {
-            await _logUserLogout(lastRecord.id);
-          }
+          _handleLogout(user);
         } else {
-          // New feature: Check for user ID and wallet amount
-          final regex = RegExp(r'^(\w+)_(\d+)_(.+)$'); // Adjust regex to match your pattern
-          final match = regex.firstMatch(code);
-
-          if (match != null && match.groupCount == 3) {
-            String scannedUserID = match.group(1)!; // Group 1 for userID
-            String amount = match.group(2)!;         // Group 2 for amount
-            String dateTime = match.group(3)!;       // Group 3 for date and time
-
-            // Debug print statements
-            print("Scanned User ID: $scannedUserID");
-            print("Amount: $amount");
-            print("Date Time: $dateTime");
-
-            // Check if the scanned userID exists in Firestore using a query
-            QuerySnapshot scannedUserQuery = await FirebaseFirestore.instance
-                .collection('users')
-                .where('userID', isEqualTo: scannedUserID) // Assuming 'userID' is the field name
-                .get();
-
-            if (scannedUserQuery.docs.isNotEmpty) {
-              DocumentSnapshot scannedUserDoc = scannedUserQuery.docs.first;
-
-              // Check if the current user is an admin
-              if (userType == 'Admin') {
-                // Show a confirmation dialog
-                bool? isConfirmed = await showDialog<bool>(
-                  context: context,
-                  builder: (BuildContext context) {
-                    return AlertDialog(
-                      title: Text("Confirm Amount"),
-                      content: Text("Have you received the exact amount of $amount for user ID: $scannedUserID?"),
-                      actions: [
-                        TextButton(
-                          child: Text("No"),
-                          onPressed: () {
-                            Navigator.of(context).pop(false);
-                          },
-                        ),
-                        TextButton(
-                          child: Text("Yes"),
-                          onPressed: () {
-                            Navigator.of(context).pop(true);
-                          },
-                        ),
-                      ],
-                    );
-                  },
-                );
-
-                if (isConfirmed == true) {
-                  // Logic to add the amount to the user's wallet
-                  await _addAmountToWallet(scannedUserID, amount);
-
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Added $amount to user ID: $scannedUserID's wallet.")),
-                  );
-                }
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("You do not have permission to add money.")),
-                );
-              }
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text("Scanned user ID does not exist.")),
-              );
-            }
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Scanned unknown QR code: $_result")),
-            );
-          }
+          _handleAmountAddition(code, user, userType);
         }
       });
     });
+  }
+
+// Handle login logic
+  Future<void> _handleLogin(User user, String firstName, String lastName) async {
+    // Check if the user is already logged in
+    QuerySnapshot loginRecord = await FirebaseFirestore.instance
+        .collection('logintime')
+        .where('userID', isEqualTo: user.uid)
+        .orderBy('scannedTime', descending: true)
+        .limit(1)
+        .get();
+
+    if (loginRecord.docs.isNotEmpty) {
+      DocumentSnapshot lastRecord = loginRecord.docs.first;
+      bool loggedOut = lastRecord['loggedOut'] ?? true;
+
+      if (!loggedOut) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("You are already logged in!"),
+            behavior: SnackBarBehavior.floating, // Floating snackbar
+            duration: Duration(seconds: 2),
+          ),
+        );
+      } else {
+        // Check user's wallet balance before allowing login
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance
+            .collection('users') // Collection is 'users'
+            .doc(user.uid) // Use user ID to get their document
+            .get();
+
+        if (userDoc.exists) {
+          // Cast wallet balance to double
+          double walletBalance = (userDoc['wallet'] is int)
+              ? (userDoc['wallet'] as int).toDouble()
+              : userDoc['wallet'] ?? 0.0;
+
+          // Subtract 30 from the wallet balance
+          double newBalance = walletBalance - 30;
+
+          // Assuming you want to check if the balance after deduction is sufficient
+          double minimumBalanceRequired = 30.0; // Set this to your required minimum balance
+
+          if (newBalance >= minimumBalanceRequired) {
+            // Update the wallet balance in Firestore
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(user.uid)
+                .update({'wallet': newBalance});
+
+            // Log the user in if they are logged out and have enough balance
+            await _logUserLogin(user.uid, firstName, lastName);
+          } else {
+            // If the user doesn't have enough balance after deduction, show a message
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text("Insufficient balance."),
+                behavior: SnackBarBehavior.floating, // Floating snackbar
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        } else {
+          // Handle case where the user document doesn't exist in the 'users' collection
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("User not found."),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } else {
+      // No previous login record found; log the user in
+      await _logUserLogin(user.uid, firstName, lastName);
+    }
+  }
+
+// Handle logout logic
+  Future<void> _handleLogout(User user) async {
+    try {
+      // First, get the actual 'userID' from the 'users' collection using the Firebase UID
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)  // Using Firebase UID to get the user's document
+          .get();
+
+      if (!userDoc.exists) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("User not found in 'users' collection."),
+            behavior: SnackBarBehavior.floating, // Floating snackbar
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
+
+      // Get the actual userID from the 'users' collection
+      String actualUserID = userDoc['userID'];  // Assuming 'userID' is stored in the 'users' collection
+
+      // Now, search for the most recent login record in the 'logintime' collection for that userID
+      QuerySnapshot loginRecord = await FirebaseFirestore.instance
+          .collection('logintime')
+          .where('userID', isEqualTo: actualUserID)  // Use actualUserID for the query
+          .orderBy('scannedTime', descending: true)  // Order by latest login time
+          .limit(1)
+          .get();
+
+      if (loginRecord.docs.isEmpty) {
+        // No login records found, inform the user
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("No login records found for this user."),
+            behavior: SnackBarBehavior.floating, // Floating snackbar
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
+
+      // Get the most recent login document
+      DocumentSnapshot lastRecord = loginRecord.docs.first;
+      bool loggedOut = lastRecord['loggedOut'] ?? false; // Check if the user is already logged out
+
+      if (loggedOut) {
+        // If already logged out, show a message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("You are already logged out!"),
+            behavior: SnackBarBehavior.floating, // Floating snackbar
+            duration: Duration(seconds: 2),
+          ),
+        );
+      } else {
+        // If not logged out, log the user out
+        await _logUserLogout(lastRecord.id); // Pass the recordID to the logout function
+      }
+    } catch (e) {
+      // Handle errors (e.g., Firestore read failure)
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error handling logout: $e"),
+          behavior: SnackBarBehavior.floating, // Floating snackbar
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+
+  Future<void> _logUserLogout(String recordID) async {
+    try {
+      // Reference to the current authenticated user
+      User? currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        // Handle case where there is no authenticated user
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("User is not authenticated."), duration: Duration(seconds: 2)),
+        );
+        return;
+      }
+
+      // Reference to the user's document in the 'users' collection using the Firebase UID
+      DocumentReference userDocRef = FirebaseFirestore.instance.collection('users').doc(currentUser.uid);
+      DocumentSnapshot userSnapshot = await userDocRef.get();
+
+      if (!userSnapshot.exists) {
+        // Handle case where the user document doesn't exist
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("User data not found."), duration: Duration(seconds: 2)),
+        );
+        return;
+      }
+
+      // Get the 'userID', 'firstName', and 'lastName' from the 'users' collection
+      String actualUserID = userSnapshot['userID'] ?? ''; // Assuming 'userID' is the field
+      String firstName = userSnapshot['firstName'] ?? '';  // Assuming 'firstName' field exists
+      String lastName = userSnapshot['lastName'] ?? '';    // Assuming 'lastName' field exists
+
+      // Reference to the login document in the 'logintime' collection using the actual userID
+      DocumentReference loginDocRef = FirebaseFirestore.instance.collection('logintime').doc(recordID);
+
+      // Check if the document exists in the 'logintime' collection
+      DocumentSnapshot loginSnapshot = await loginDocRef.get();
+
+      if (loginSnapshot.exists) {
+        // If the document exists, update the 'loggedOut' field in the 'logintime' collection
+        await loginDocRef.update({
+          'loggedOut': true,  // Setting loggedOut to true (user has logged out)
+          'scannedTime': FieldValue.serverTimestamp(), // Automatically set to the current server time
+        });
+
+        // Now, create a new entry in the 'logouttime' collection with the necessary data
+        await FirebaseFirestore.instance.collection('logouttime').doc(actualUserID).set({
+          'firstName': firstName,
+          'lastName': lastName,
+          'loggedIn': 'false',  // LoggedIn is set to 'false' in the 'logouttime' collection
+          'scannedQR': "http://www.FitTrack_Logout.com",  // QR code URL indicating logout
+          'scannedTime': FieldValue.serverTimestamp(), // Automatically set to the current server time
+          'userID': actualUserID,  // Include the actual userID
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Logout recorded successfully"),
+            behavior: SnackBarBehavior.floating, // Floating snackbar
+            duration: Duration(seconds: 2),
+          ),
+        );
+      } else {
+        // Handle case where the document does not exist in the 'logintime' collection
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("No login record found for this user."),
+            behavior: SnackBarBehavior.floating, // Floating snackbar
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
+      // Call the method to proceed with sign-out
+      _proceedToSignOut();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error logging out: $e"),
+          behavior: SnackBarBehavior.floating, // Floating snackbar
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+// Handle adding amount to user's wallet
+  Future<void> _handleAmountAddition(String code, User user, String userType) async {
+    final regex = RegExp(r'^(20[2-9]\d{2}\d+)$'); // Regex to match valid userID (2020+)
+    final match = regex.firstMatch(code);
+
+    if (match != null && match.groupCount == 1) {
+      String scannedUserID = match.group(1)!; // Group 1 for userID
+
+      // Prompt the admin to enter the amount to cash in
+      TextEditingController amountController = TextEditingController();
+      bool? isAmountConfirmed = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text("Enter Cash-in Amount"),
+            content: TextField(
+              controller: amountController,
+              decoration: InputDecoration(
+                labelText: "Amount",
+                hintText: "Enter amount to cash in",
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            actions: [
+              TextButton(
+                child: Text("Cancel"),
+                onPressed: () {
+                  Navigator.of(context).pop(false);
+                },
+              ),
+              TextButton(
+                child: Text("Confirm"),
+                onPressed: () {
+                  Navigator.of(context).pop(true);
+                },
+              ),
+            ],
+          );
+        },
+      );
+
+      if (isAmountConfirmed == true && amountController.text.isNotEmpty) {
+        String amount = amountController.text.trim();
+
+        // Show confirmation dialog for the entered amount
+        bool? isFinalConfirmation = await showDialog<bool>(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: Text("Confirm Amount"),
+              content: Text("Are you sure you want to add $amount to user ID: $scannedUserID's wallet?"),
+              actions: [
+                TextButton(
+                  child: Text("Cancel"),
+                  onPressed: () {
+                    Navigator.of(context).pop(false);
+                  },
+                ),
+                TextButton(
+                  child: Text("Yes"),
+                  onPressed: () {
+                    Navigator.of(context).pop(true);
+                  },
+                ),
+              ],
+            );
+          },
+        );
+
+        if (isFinalConfirmation == true) {
+          // Logic to add the amount to the user's wallet
+          await _addAmountToWallet(scannedUserID, amount);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Added $amount to user ID: $scannedUserID's wallet."),
+              behavior: SnackBarBehavior.floating, // Floating snackbar
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Invalid amount entered. Please try again."),
+            behavior: SnackBarBehavior.floating, // Floating snackbar
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Scanned unknown QR code: $code"),
+          behavior: SnackBarBehavior.floating, // Floating snackbar
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   Future<void> _launchURL(String url) async {
@@ -324,6 +540,13 @@ class _QRScannerState extends State<ScanPage> {
 
   // Function to find the user document by userID and add amount to wallet in Firestore
   Future<void> _addAmountToWallet(String scannedUserID, String amount) async {
+    User? currentUser = FirebaseAuth.instance.currentUser;
+
+    if (currentUser == null) {
+      print("No user is logged in.");
+      return;
+    }
+
     // Query to find the user document with the specified userID
     QuerySnapshot scannedUserQuery = await FirebaseFirestore.instance
         .collection('users')
@@ -336,6 +559,22 @@ class _QRScannerState extends State<ScanPage> {
       DocumentSnapshot scannedUserDoc = scannedUserQuery.docs.first;
       String documentID = scannedUserDoc.id; // Get the document ID
 
+      // Admin (the person performing the scan and confirmation)
+      String adminID = currentUser.uid; // Use the current user's uid as adminID
+
+      // Fetch the current user's name from the users collection (if not null)
+      DocumentSnapshot adminDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(adminID)
+          .get();
+
+      String adminName = '';
+      if (adminDoc.exists) {
+        adminName = '${adminDoc['firstName']} ${adminDoc['lastName']}'; // Admin's full name
+      }
+
+      String userName = '${scannedUserDoc['firstName']} ${scannedUserDoc['lastName']}'; // User's name
+
       try {
         // Ensure the amount is a valid integer
         int amountToAdd = int.parse(amount);
@@ -346,6 +585,18 @@ class _QRScannerState extends State<ScanPage> {
         });
 
         print("Successfully added $amount to user ID: $scannedUserID's wallet.");
+
+        // Log the cash-in transaction in the cashinlogs collection
+        await FirebaseFirestore.instance.collection('cashinlogs').add({
+          'adminID': adminID, // Use the current user's uid as adminID
+          'adminName': adminName, // Use the fetched admin name
+          'amount': amountToAdd,
+          'userID': scannedUserID,
+          'userName': userName,
+          'scannedTime': FieldValue.serverTimestamp(), // Automatically add timestamp
+        });
+
+        print("Cash-in transaction logged successfully for user ID: $scannedUserID.");
       } catch (e) {
         print('Error updating wallet: $e');
         throw e; // Rethrow to handle in the calling method
@@ -355,34 +606,51 @@ class _QRScannerState extends State<ScanPage> {
     }
   }
 
-  Future<void> _proceedToSignOut() async {
-    try {
-      await _auth.signOut();
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => LoginPage()),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error signing out: $e')),
-      );
-    }
-  }
-
   Future<void> _logUserLogin(String userID, String firstName, String lastName) async {
+    // Get the current FirebaseAuth user
+    User? currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      // Handle case where there is no authenticated user
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("User is not authenticated."), duration: Duration(seconds: 2)),
+      );
+      return;
+    }
+
+    // Reference to the user's document in the 'users' collection
+    DocumentReference userDocRef = FirebaseFirestore.instance.collection('users').doc(currentUser.uid);
+
+    // Fetch the user's document to get the 'userID'
+    DocumentSnapshot userSnapshot = await userDocRef.get();
+
+    if (!userSnapshot.exists) {
+      // Handle case where the user document doesn't exist
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("User data not found."), duration: Duration(seconds: 2)),
+      );
+      return;
+    }
+
+    // Get the 'userID' (assuming 'userID' is the field in the 'users' collection)
+    String actualUserID = userSnapshot['userID'] ?? ''; // Assuming the field is 'userID'
+
     // Reference to the login document for the given userID
-    DocumentReference loginDocRef = FirebaseFirestore.instance.collection('logintime').doc(userID);
+    DocumentReference loginDocRef = FirebaseFirestore.instance.collection('logintime').doc(actualUserID);
 
     // Check if a document already exists for the given userID
-    DocumentSnapshot userSnapshot = await loginDocRef.get();
+    DocumentSnapshot loginSnapshot = await loginDocRef.get();
 
-    if (userSnapshot.exists) {
+    if (loginSnapshot.exists) {
       // If the document exists, update the 'loggedOut' field to false
       await loginDocRef.update({
         'loggedOut': false,
         'scannedTime': FieldValue.serverTimestamp(), // Automatically set to the current server time
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Welcome back! You've successfully logged in.")),
+        SnackBar(content: Text("Welcome back! You've successfully logged in."),
+          behavior: SnackBarBehavior.floating, // Floating snackbar
+          duration: Duration(seconds: 2),
+        ),
       );
     } else {
       // If the document does not exist, create a new document for this user
@@ -392,33 +660,15 @@ class _QRScannerState extends State<ScanPage> {
         'loggedOut': false,
         'scannedQR': "http://www.FitTrack_Login.com",
         'scannedTime': FieldValue.serverTimestamp(), // Automatically set to the current server time
-        'userID': userID,
+        'userID': actualUserID, // Store the actual userID from the 'users' collection
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("You have successfully logged in for the first time!")),
+        SnackBar(content: Text("You have successfully logged in."),
+          behavior: SnackBarBehavior.floating, // Floating snackbar
+          duration: Duration(seconds: 2),
+        ),
       );
     }
-  }
-
-  Future<void> _logUserLogout(String recordID) async {
-    await FirebaseFirestore.instance.collection('logintime').doc(recordID).update({
-      'loggedOut': true,
-      'scannedTime': FieldValue.serverTimestamp(),
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Logout recorded successfully")),
-    );
-    _proceedToSignOut();
-  }
-
-
-  void _createQRCode(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => CreateQRCodeScreen(),
-      ),
-    );
   }
 
   @override

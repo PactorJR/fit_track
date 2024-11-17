@@ -37,6 +37,7 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
+  bool _isLoading = false;
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _birthdayController = TextEditingController();
   final TextEditingController _firstNameController = TextEditingController();
@@ -119,6 +120,9 @@ class _RegisterPageState extends State<RegisterPage> {
     }
 
   Future<void> register() async {
+    setState(() {
+      _isLoading = true; // Show loading indicator
+    });
 
     if (_formKey.currentState?.validate() != true) {
       setState(() {
@@ -189,17 +193,17 @@ class _RegisterPageState extends State<RegisterPage> {
         password: _passwordController.text,
       );
 
-    String? fileUrl;
+      String? fileUrl;
 
-    if (_selectedUserType == 'Student') {
-      fileUrl = await _uploadFile(userCredential.user!.uid);
-      if (fileUrl == null) {
-        print('File upload failed or no file was uploaded.');
-        return; // Optionally return if file upload fails
+      if (_selectedUserType == 'Student') {
+        fileUrl = await _uploadFile(userCredential.user!.uid);
+        if (fileUrl == null) {
+          print('File upload failed or no file was uploaded.');
+          return; // Optionally return if file upload fails
+        }
       }
-    }
 
-    await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).set({
+      await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).set({
         'firstName': _firstNameController.text,
         'lastName': _lastNameController.text,
         'birthday': _birthdayController.text,
@@ -213,6 +217,8 @@ class _RegisterPageState extends State<RegisterPage> {
         'userStatus': 'On Approval',
         'lastLogin': 'N/A',
         if (fileUrl != null) 'certificateUrl': fileUrl,
+        'registerTime': FieldValue.serverTimestamp(), // Add register timestamp
+        'seen': false,
       });
 
       // Show success dialog after registration
@@ -259,6 +265,10 @@ class _RegisterPageState extends State<RegisterPage> {
     } catch (e) {
       setState(() {
         errorMessage = e.toString();
+      });
+    } finally {
+      setState(() {
+        _isLoading = false; // Hide loading indicator
       });
     }
   }
@@ -530,6 +540,11 @@ class _RegisterPageState extends State<RegisterPage> {
                       style: const TextStyle(color: Colors.red),
                     ),
                     const SizedBox(height: 10),
+                    if (_isLoading)
+                      Center(
+                        child: CircularProgressIndicator(), // Loading indicator
+                      )
+                    else
                     ElevatedButton(
                       onPressed: () async {
                         if (_formKey.currentState?.validate() == true) {

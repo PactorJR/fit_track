@@ -6,7 +6,7 @@ import 'firebase_options.dart';
 import 'menu_admin.dart';
 import 'profile.dart';
 import 'history.dart';
-import 'alerts.dart';
+import 'alerts_admin.dart';
 import 'scan_qr.dart';
 
 void main() async {
@@ -65,7 +65,7 @@ class _MyHomePageState extends State<MyAdminHomePage> {
   Widget build(BuildContext context) {
     final List<Widget> _bottomNavPages = [
       HomePage(),
-      AlertsPage(),
+      AlertsPageAdmin(),
       HistoryPage(),
       MenuAdminPage(),
     ];
@@ -73,80 +73,88 @@ class _MyHomePageState extends State<MyAdminHomePage> {
     final List<Widget> _drawerPages = [
     ];
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.green.shade200,
-        automaticallyImplyLeading: false, // This removes the back button
-        title: Row(
-          children: [
-            Image.asset(
-              'assets/images/FitTrack_Icon.png',
-              width: 40,
-              height: 40,
-            ),
-            SizedBox(width: 8),
-            Text(_currentTitle),
-          ],
+    return WillPopScope(
+      onWillPop: () async {
+        // You can add custom behavior when the back button is pressed here
+        // For example, return true to allow the pop or false to prevent it
+        return false; // This will prevent the default back navigation
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: false, // Prevents resizing when Snackbar appears
+        appBar: AppBar(
+          backgroundColor: Colors.green.shade200,
+          automaticallyImplyLeading: false, // This removes the back button
+          title: Row(
+            children: [
+              Image.asset(
+                'assets/images/FitTrack_Icon.png',
+                width: 40,
+                height: 40,
+              ),
+              SizedBox(width: 8),
+              Text(_currentTitle),
+            ],
+          ),
         ),
-      ),
-      body: _drawerIndex == -1
-          ? _bottomNavPages[_selectedBottomNavIndex]
-          : _drawerPages[_drawerIndex],
-      bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 10,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            IconButton(
-              icon: Icon(Icons.home),
-              color: _selectedBottomNavIndex == 0 ? Colors.green : Colors.grey,
-              onPressed: () {
-                _onBottomNavTapped(0);
-              },
-            ),
-            IconButton(
-              icon: Icon(Icons.notifications),
-              color: _selectedBottomNavIndex == 1 ? Colors.green : Colors.grey,
-              onPressed: () {
-                _onBottomNavTapped(1);
-              },
-            ),
-            SizedBox(width: 40), // Space for FAB in the center
-            IconButton(
-              icon: Icon(Icons.history),
-              color: _selectedBottomNavIndex == 2 ? Colors.green : Colors.grey,
-              onPressed: () {
-                _onBottomNavTapped(2); // Ensure History has the correct index
-              },
-            ),
-            IconButton(
-              icon: Icon(Icons.menu),
-              color: _selectedBottomNavIndex == 3 ? Colors.green : Colors.grey,
-              onPressed: () {
-                _onBottomNavTapped(3);
-              },
-            ),
-          ],
+        body: _drawerIndex == -1
+            ? _bottomNavPages[_selectedBottomNavIndex]
+            : _drawerPages[_drawerIndex],
+        bottomNavigationBar: BottomAppBar(
+          shape: const CircularNotchedRectangle(),
+          notchMargin: 10,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: Icon(Icons.home),
+                color: _selectedBottomNavIndex == 0 ? Colors.green : Colors.grey,
+                onPressed: () {
+                  _onBottomNavTapped(0);
+                },
+              ),
+              IconButton(
+                icon: Icon(Icons.notifications),
+                color: _selectedBottomNavIndex == 1 ? Colors.green : Colors.grey,
+                onPressed: () {
+                  _onBottomNavTapped(1);
+                },
+              ),
+              SizedBox(width: 40), // Space for FAB in the center
+              IconButton(
+                icon: Icon(Icons.history),
+                color: _selectedBottomNavIndex == 2 ? Colors.green : Colors.grey,
+                onPressed: () {
+                  _onBottomNavTapped(2); // Ensure History has the correct index
+                },
+              ),
+              IconButton(
+                icon: Icon(Icons.menu),
+                color: _selectedBottomNavIndex == 3 ? Colors.green : Colors.grey,
+                onPressed: () {
+                  _onBottomNavTapped(3);
+                },
+              ),
+            ],
+          ),
         ),
-      ),
-      floatingActionButton: SizedBox(
-        height: 100.0, // Equal width and height for a circular shape
-        width: 100.0,
-        child: RawMaterialButton(
-          onPressed: () {
-            setState(() {});
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => ScanPage()), // Directly navigate to QRScanner
-            );
-          },
-          shape: const CircleBorder(), // Ensures the button is circular
-          fillColor: Colors.white, // You can customize the button's color here
-          child: const Icon(Icons.qr_code_scanner, size: 50, color: Colors.green), // Increase icon size
+        floatingActionButton: SizedBox(
+          height: 100.0, // Equal width and height for a circular shape
+          width: 100.0,
+          child: RawMaterialButton(
+            onPressed: () {
+              setState(() {});
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => ScanPage()), // Directly navigate to QRScanner
+              );
+            },
+            shape: const CircleBorder(), // Ensures the button is circular
+            fillColor: Colors.white, // You can customize the button's color here
+            child: const Icon(Icons.qr_code_scanner, size: 50, color: Colors.green), // Increase icon size
+          ),
         ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
 

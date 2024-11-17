@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:qr_flutter/qr_flutter.dart'; // Use QrImage
-import 'package:intl/intl.dart'; // For date and time formatting
-import 'package:cloud_firestore/cloud_firestore.dart'; // Import for Firestore
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'profile.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -36,6 +36,7 @@ class CashInPage extends StatefulWidget {
 class _CashInPageState extends State<CashInPage> {
   User? _user;
   DocumentSnapshot? _userData;
+  String? _qrData;
 
   @override
   void initState() {
@@ -43,19 +44,22 @@ class _CashInPageState extends State<CashInPage> {
     _user = FirebaseAuth.instance.currentUser;
     if (_user != null) {
       _fetchUserData();
+      _generateQRCode();
     }
   }
 
   Future<void> _fetchUserData() async {
     try {
+      // Fetch user data from Firestore
       DocumentSnapshot userDoc = await FirebaseFirestore.instance
           .collection('users')
-          .doc(_user!.uid)
+          .doc(_user!.uid)  // Fetching the current user's document
           .get();
 
       if (userDoc.exists) {
         setState(() {
           _userData = userDoc;
+          _qrData = _userData?.get('userID')?.toString() ?? 'Not available'; // Retrieve the numeric userID
         });
       } else {
         print('User document does not exist');
@@ -65,9 +69,13 @@ class _CashInPageState extends State<CashInPage> {
     }
   }
 
-  final TextEditingController _studentIdController = TextEditingController();
-  final TextEditingController _amountController = TextEditingController();
-
+  void _generateQRCode() {
+    if (_user != null) {
+      setState(() {
+        _qrData = _user!.uid; // QR code data is now only the user's ID
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -77,8 +85,8 @@ class _CashInPageState extends State<CashInPage> {
           Container(
             decoration: BoxDecoration(
               image: DecorationImage(
-                image: AssetImage('assets/images/bg.png'), // Background image
-                fit: BoxFit.cover, // Cover the entire container
+                image: AssetImage('assets/images/bg.png'),
+                fit: BoxFit.cover,
               ),
             ),
             child: Padding(
@@ -87,7 +95,6 @@ class _CashInPageState extends State<CashInPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // New container on top
                     Container(
                       padding: const EdgeInsets.symmetric(
                           vertical: 20.0, horizontal: 24.0),
@@ -124,7 +131,7 @@ class _CashInPageState extends State<CashInPage> {
                                   StreamBuilder<DocumentSnapshot>(
                                     stream: FirebaseFirestore.instance
                                         .collection('users')
-                                        .doc(_user!.uid) // Use the actual user ID
+                                        .doc(_user!.uid)
                                         .snapshots(),
                                     builder: (context, snapshot) {
                                       if (snapshot.connectionState == ConnectionState.waiting) {
@@ -150,8 +157,7 @@ class _CashInPageState extends State<CashInPage> {
                                   SizedBox(width: 20),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           "${_userData?.get('firstName') ?? 'First Name'} ${_userData?.get('lastName') ?? 'Last Name'}",
@@ -183,103 +189,48 @@ class _CashInPageState extends State<CashInPage> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16.0), // Spacing
-
-                    // Existing container
+                    const SizedBox(height: 16.0),
                     Container(
-                      padding: const EdgeInsets.all(16.0),
+                      padding: const EdgeInsets.all(20.0),
                       decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(1),
-                        borderRadius: BorderRadius.circular(8.0),
-                      ),
-                      child: Column(
-                        children: [
-                          TextField(
-                            controller: _studentIdController,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: InputDecoration(
-                              labelText: 'Student ID',
-                              labelStyle: const TextStyle(color: Colors.white),
-                              border: OutlineInputBorder(
-                                borderSide: BorderSide(color: Colors.white),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderSide: BorderSide(color: Colors.white),
-                              ),
-                            ),
-                            keyboardType: TextInputType.number,
-                          ),
-                          const SizedBox(height: 16.0),
-                          TextField(
-                            controller: _amountController,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: InputDecoration(
-                              labelText: 'Amount',
-                              labelStyle: const TextStyle(color: Colors.white),
-                              border: OutlineInputBorder(
-                                borderSide: BorderSide(color: Colors.white),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderSide: BorderSide(color: Colors.white),
-                              ),
-                            ),
-                            keyboardType: TextInputType.number,
-                          ),
-                          const SizedBox(height: 24.0),
-                          ElevatedButton(
-                            onPressed: () {
-                              String studentId = _studentIdController.text;
-                              String amount = _amountController.text;
-                              String currentDateTime = DateFormat('yyyy-MM-dd_HH:mm:ss').format(DateTime.now());
-
-                              // Construct the QR code data
-                              String qrData = '${studentId}_${amount}_$currentDateTime';
-
-                              print("QR Data: $qrData"); // Debug print
-
-                              // Show the QR code in a dialog
-                              showDialog(
-                                context: context,
-                                builder: (context) {
-                                  return AlertDialog(
-                                    content: SizedBox(
-                                      width: 400.0, // Set width to ensure dialog has enough space
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          QrImageView(
-                                            data: qrData,
-                                            version: QrVersions.auto,
-                                            size: 300.0,
-                                          ),
-                                          const SizedBox(height: 0),
-                                          Text('Cash-in Amount: ₱$amount'),
-                                          Text('Cash-in to UserID: $studentId'),
-                                          Text('Cash-in Date & Time: $currentDateTime'),
-                                        ],
-                                      ),
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () {
-                                          Navigator.of(context).pop();
-                                        },
-                                        child: Text('Close'),
-                                      ),
-                                    ],
-                                  );
-                                },
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: Colors.black,
-                            ),
-                            child: const Text('Submit'),
+                        color: Colors.green.shade800.withOpacity(0.8),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.grey.withOpacity(0.3),
+                            spreadRadius: 2,
+                            blurRadius: 5,
+                            offset: Offset(0, 3),
                           ),
                         ],
                       ),
+                      child: Container(
+                      decoration: BoxDecoration(
+                      color: Colors.green[100],
+                      borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          Text(
+                            "User QR Code",
+                            style: TextStyle(
+                              fontSize: 24,
+                              color: Colors.black54,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          if (_qrData != null)
+                            QrImageView(
+                              data: _qrData!,
+                              version: QrVersions.auto,
+                              size: 325.0,
+                            ),
+                          const SizedBox(height: 8),
+                        ],
+                      ),
+                    ),
                     ),
                   ],
                 ),
@@ -287,13 +238,13 @@ class _CashInPageState extends State<CashInPage> {
             ),
           ),
           Positioned(
-            top: 60, // Adjust this value to move the button down
-            left: 16, // Horizontal position
+            top: 60,
+            left: 16,
             child: FloatingActionButton(
-              mini: true, // Smaller back button
+              mini: true,
               backgroundColor: Colors.green,
               onPressed: () {
-                Navigator.of(context).pop(); // Navigate back to the previous screen
+                Navigator.of(context).pop();
               },
               child: Icon(Icons.arrow_back, color: Colors.white),
             ),
