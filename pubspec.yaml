@@ -44,8 +44,10 @@ dependencies:
   webview_flutter: ^4.10.0
   flutter_local_notifications: ^18.0.1
   flutter_secure_storage: ^9.2.2
+  flutter_launcher_icons: ^0.14.1
 
 dev_dependencies:
+
   flutter_test:
     sdk: flutter
 
@@ -55,6 +57,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^4.0.0
+
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -80,6 +83,10 @@ flutter:
     - assets/images/image3.png
     - assets/images/image4.png
     - assets/images/Icon_Notif.png
+    - assets/icons/app_icon.png
+    - assets/icons/background.png
+    - assets/icons/foreground.png
+    - assets/icons/monochrome.png
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

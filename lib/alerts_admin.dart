@@ -19,6 +19,12 @@ Widget detectNewUsers(BuildContext context) {
         return Text('Error: ${snapshot.error}');
       }
 
+      // If no new users found
+      if (snapshot.hasData && snapshot.data!.docs.isEmpty) {
+        return Center(child: Text('No new user found.'));
+      }
+
+      // If there are new users
       if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
         return Column(
           children: snapshot.data!.docs.map((doc) {
@@ -27,11 +33,11 @@ Widget detectNewUsers(BuildContext context) {
 
             return GestureDetector(
               onTap: () {
-                String userId = doc.id; // Correctly use doc.id to get the document ID
+                String userId = doc.id;
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => UsersAdminPage(userId: userId), // Pass the userId to UsersAdminPage
+                    builder: (context) => UsersAdminPage(userId: userId),
                   ),
                 );
               },
@@ -75,15 +81,14 @@ Widget detectNewUsers(BuildContext context) {
             );
           }).toList(),
         );
-      } else {
-        return Text(
-          'No new users detected today.',
-          style: TextStyle(color: Colors.green, fontSize: 16),
-        );
       }
+
+      // Default case if no data
+      return SizedBox.shrink();
     },
   );
 }
+
 
 Widget detectCashIns(BuildContext context) {
   User? currentUser = FirebaseAuth.instance.currentUser;
@@ -161,10 +166,7 @@ Widget detectCashIns(BuildContext context) {
           }).toList(),
         );
       } else {
-        return Text(
-          'No cash-in transactions detected.',
-          style: TextStyle(color: Colors.blue, fontSize: 16),
-        );
+        return SizedBox.shrink();
       }
     },
   );
@@ -235,10 +237,7 @@ Widget detectLogins(BuildContext context) {
           }).toList(),
         );
       } else {
-        return Text(
-          'No active login records found.',
-          style: TextStyle(color: Colors.blue, fontSize: 16),
-        );
+        return SizedBox.shrink();
       }
     },
   );
@@ -310,10 +309,7 @@ Widget detectLogouts(BuildContext context) {
           }).toList(),
         );
       } else {
-        return Text(
-          'No logout records found.',
-          style: TextStyle(color: Colors.red, fontSize: 16),
-        );
+        return SizedBox.shrink();
       }
     },
   );
@@ -328,6 +324,38 @@ class AlertsPageAdmin extends StatefulWidget {
 
 class _AlertsPageAdminState extends State<AlertsPageAdmin> {
   String selectedFilter = 'All';
+
+  bool hasData(AsyncSnapshot<QuerySnapshot> snapshot) {
+    return snapshot.hasData && snapshot.data!.docs.isNotEmpty;
+  }
+
+  Widget getFilteredContent() {
+    if (selectedFilter == 'New User') {
+      Widget newUsersWidget = detectNewUsers(context);
+      if (newUsersWidget is SizedBox && (newUsersWidget.key == null || newUsersWidget == SizedBox.shrink())) {
+        return Center(child: Text('No new user found.'));
+      } else {
+        return newUsersWidget;
+      }
+    } else if (selectedFilter == 'Cash-ins') {
+      return detectCashIns(context);
+    } else if (selectedFilter == 'Logins') {
+      return detectLogins(context);
+    } else if (selectedFilter == 'Logouts') {
+      return detectLogouts(context);
+    } else {
+      return Column(
+        children: [
+          detectNewUsers(context),
+          detectCashIns(context),
+          detectLogins(context),
+          detectLogouts(context),
+        ],
+      );
+    }
+  }
+
+
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
@@ -416,18 +444,7 @@ class _AlertsPageAdminState extends State<AlertsPageAdmin> {
                             ],
                           ),
                           const SizedBox(height: 8.0),
-                          if (selectedFilter == 'All' ||
-                              selectedFilter == 'New User')
-                            detectNewUsers(context),
-                          if (selectedFilter == 'All' ||
-                              selectedFilter == 'Cash-ins')
-                            detectCashIns(context),
-                          if (selectedFilter == 'All' ||
-                              selectedFilter == 'Logins')
-                            detectLogins(context),
-                          if (selectedFilter == 'All' ||
-                              selectedFilter == 'Logouts')
-                            detectLogouts(context),
+                          getFilteredContent(), // Dynamically display the content based on the selected filter
                         ],
                       ),
                     ),
