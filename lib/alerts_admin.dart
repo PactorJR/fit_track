@@ -19,11 +19,6 @@ Widget detectNewUsers(BuildContext context) {
         return Text('Error: ${snapshot.error}');
       }
 
-      // If no new users found
-      if (snapshot.hasData && snapshot.data!.docs.isEmpty) {
-        return Center(child: Text('No new user found.'));
-      }
-
       // If there are new users
       if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
         return Column(
@@ -105,6 +100,7 @@ Widget detectCashIns(BuildContext context) {
   return StreamBuilder<QuerySnapshot>(
     stream: FirebaseFirestore.instance
         .collection('cashinlogs')
+        .where('seen', isEqualTo: false)
         .where('adminID', isEqualTo: currentAdminId)
         .snapshots(),
     builder: (context, snapshot) {
@@ -176,6 +172,7 @@ Widget detectLogins(BuildContext context) {
   return StreamBuilder<QuerySnapshot>(
     stream: FirebaseFirestore.instance
         .collection('logintime')
+        .where('seen', isEqualTo: false)
         .snapshots(),
     builder: (context, snapshot) {
       if (snapshot.connectionState == ConnectionState.waiting) {
@@ -247,6 +244,7 @@ Widget detectLogouts(BuildContext context) {
   return StreamBuilder<QuerySnapshot>(
     stream: FirebaseFirestore.instance
         .collection('logouttime')
+        .where('seen', isEqualTo: false)
         .where('loggedIn', isEqualTo: 'false')
         .snapshots(),
     builder: (context, snapshot) {
@@ -332,17 +330,142 @@ class _AlertsPageAdminState extends State<AlertsPageAdmin> {
   Widget getFilteredContent() {
     if (selectedFilter == 'New User') {
       Widget newUsersWidget = detectNewUsers(context);
-      if (newUsersWidget is SizedBox && (newUsersWidget.key == null || newUsersWidget == SizedBox.shrink())) {
-        return Center(child: Text('No new user found.'));
-      } else {
-        return newUsersWidget;
-      }
+      return StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .where('seen', isEqualTo: false)
+            .where('registerTime', isLessThan: Timestamp.fromDate(DateTime.now()))
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasData && snapshot.data!.docs.isEmpty) {
+            return Center(child: Text('No new user found.', style: TextStyle(color: Colors.white, fontSize: 18)));
+          }
+          return newUsersWidget;
+        },
+      );
     } else if (selectedFilter == 'Cash-ins') {
-      return detectCashIns(context);
+      Widget cashInsWidget = detectCashIns(context);
+      return StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('cashinlogs')
+            .where('seen', isEqualTo: false)
+            .where('adminID', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const CircularProgressIndicator();
+          }
+          if (snapshot.hasData && snapshot.data!.docs.isEmpty) {
+            return Center(child: Text('No cash-in logs found.', style: TextStyle(color: Colors.white, fontSize: 18)));
+          }
+          return cashInsWidget;
+        },
+      );
     } else if (selectedFilter == 'Logins') {
-      return detectLogins(context);
+      Widget loginsWidget = detectLogins(context);
+      return StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('logintime')
+            .where('seen', isEqualTo: false)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const CircularProgressIndicator();
+          }
+          if (snapshot.hasData && snapshot.data!.docs.isEmpty) {
+            return Center(child: Text('No login records found.', style: TextStyle(color: Colors.white, fontSize: 18)));
+          }
+          return loginsWidget;
+        },
+      );
     } else if (selectedFilter == 'Logouts') {
-      return detectLogouts(context);
+      Widget logoutsWidget = detectLogouts(context);
+      return StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('logouttime')
+            .where('seen', isEqualTo: false)
+            .where('loggedIn', isEqualTo: 'false')
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const CircularProgressIndicator();
+          }
+          if (snapshot.hasData && snapshot.data!.docs.isEmpty) {
+            return Center(child: Text('No logout records found.', style: TextStyle(color: Colors.white, fontSize: 18)));
+          }
+          return logoutsWidget;
+        },
+      );
+    } else if (selectedFilter == 'All') {
+      return StreamBuilder(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .where('seen', isEqualTo: false)
+            .snapshots(),
+        builder: (context, usersSnapshot) {
+          if (usersSnapshot.connectionState == ConnectionState.waiting) {
+            return const CircularProgressIndicator();
+          }
+
+          return StreamBuilder(
+            stream: FirebaseFirestore.instance
+                .collection('cashinlogs')
+                .where('seen', isEqualTo: false)
+                .where('adminID', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                .snapshots(),
+            builder: (context, cashinsSnapshot) {
+              if (cashinsSnapshot.connectionState == ConnectionState.waiting) {
+                return const CircularProgressIndicator();
+              }
+
+              return StreamBuilder(
+                stream: FirebaseFirestore.instance
+                    .collection('logintime')
+                    .where('seen', isEqualTo: false)
+                    .snapshots(),
+                builder: (context, loginsSnapshot) {
+                  if (loginsSnapshot.connectionState == ConnectionState.waiting) {
+                    return const CircularProgressIndicator();
+                  }
+
+                  return StreamBuilder(
+                    stream: FirebaseFirestore.instance
+                        .collection('logouttime')
+                        .where('seen', isEqualTo: false)
+                        .where('loggedIn', isEqualTo: 'false')
+                        .snapshots(),
+                    builder: (context, logoutsSnapshot) {
+                      if (logoutsSnapshot.connectionState == ConnectionState.waiting) {
+                        return const CircularProgressIndicator();
+                      }
+
+                      // Check if all collections are empty
+                      bool allEmpty = usersSnapshot.hasData && usersSnapshot.data!.docs.isEmpty &&
+                          cashinsSnapshot.hasData && cashinsSnapshot.data!.docs.isEmpty &&
+                          loginsSnapshot.hasData && loginsSnapshot.data!.docs.isEmpty &&
+                          logoutsSnapshot.hasData && logoutsSnapshot.data!.docs.isEmpty;
+
+                      if (allEmpty) {
+                        return Center(child: Text('No alerts found.', style: TextStyle(color: Colors.white, fontSize: 18)));
+                      }
+
+                      // If there's data in any of the collections, show respective widgets
+                      return Column(
+                        children: [
+                          detectNewUsers(context),
+                          detectCashIns(context),
+                          detectLogins(context),
+                          detectLogouts(context),
+                        ],
+                      );
+                    },
+                  );
+                },
+              );
+            },
+          );
+        },
+      );
     } else {
       return Column(
         children: [
@@ -354,6 +477,8 @@ class _AlertsPageAdminState extends State<AlertsPageAdmin> {
       );
     }
   }
+
+
 
 
   @override
@@ -393,12 +518,12 @@ class _AlertsPageAdminState extends State<AlertsPageAdmin> {
                                 children: [
                                   const Icon(
                                     Icons.notifications,
-                                    color: Colors.green,
+                                    color: Colors.lightGreen,
                                   ),
                                   const SizedBox(width: 8.0),
                                   const Text(
                                     'ALERTS',
-                                    style: TextStyle(color: Colors.green, fontSize: 18),
+                                    style: TextStyle(color: Colors.white, fontSize: 20),
                                   ),
                                 ],
                               ),
@@ -407,7 +532,7 @@ class _AlertsPageAdminState extends State<AlertsPageAdmin> {
                                 value: selectedFilter,
                                 icon: Icon(
                                   Icons.filter_alt,
-                                  color: Colors.green,
+                                  color: Colors.lightGreen,
                                 ),
                                 onChanged: (String? newFilter) {
                                   if (newFilter != null) {
@@ -443,7 +568,7 @@ class _AlertsPageAdminState extends State<AlertsPageAdmin> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 8.0),
+                          const SizedBox(height: 30.0),
                           getFilteredContent(), // Dynamically display the content based on the selected filter
                         ],
                       ),

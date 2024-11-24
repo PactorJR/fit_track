@@ -347,10 +347,6 @@ class _AlertsPageState extends State<AlertsPage> {
                           .snapshots(),
                       builder: (context,
                           AsyncSnapshot<QuerySnapshot> snapshot) {
-                        if (!snapshot.hasData || actualUserID == null) {
-                          return const Center(
-                              child: CircularProgressIndicator());
-                        }
 
                         final alerts = snapshot.data!.docs.map((alert) async {
                           final alertData = alert.data() as Map<String,

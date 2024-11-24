@@ -5,9 +5,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'menu_admin.dart';
 import 'profile.dart';
-import 'history.dart';
+import 'history_admin.dart';
 import 'alerts_admin.dart';
 import 'scan_qr.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,12 +18,16 @@ void main() async {
   runApp(const MyApp());
 }
 
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
         useMaterial3: true,
@@ -31,6 +36,7 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+
 
 class MyAdminHomePage extends StatefulWidget {
   const MyAdminHomePage({super.key, required this.title});
@@ -59,14 +65,84 @@ class _MyHomePageState extends State<MyAdminHomePage> {
   void initState() {
     super.initState();
     _isDarkMode = false;
+    _initializeNotifications();
+    _checkNewUsers(); // Check for new users immediately when the page loads
   }
+
+
+  Future<void> _initializeNotifications() async {
+    const AndroidInitializationSettings initializationSettingsAndroid =
+    AndroidInitializationSettings('drawable/app_icon');  // Custom icon name (without extension)
+
+    final InitializationSettings initializationSettings =
+    InitializationSettings(android: initializationSettingsAndroid);
+
+    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+  }
+
+  Future<void> _onSelectNotification(String? payload) async {
+    // Navigate to the AlertsAdmin page when the notification is tapped
+    if (payload == 'new_user') {
+      Navigator.of(navigatorKey.currentContext!).push(
+        MaterialPageRoute(builder: (context) => AlertsPageAdmin()), // Navigate to AlertsAdmin screen
+      );
+    }
+  }
+
+  Future<void> _showNewUserNotification(String userName) async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+    AndroidNotificationDetails(
+      'new_user_channel',
+      'New User Notifications',
+      channelDescription: 'Notifications when a new user registers',
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+
+    const NotificationDetails platformChannelSpecifics =
+    NotificationDetails(android: androidPlatformChannelSpecifics);
+
+    await flutterLocalNotificationsPlugin.show(
+      0, // notification id
+      'New User Registered',
+      '$userName has registered and is awaiting approval',
+      platformChannelSpecifics,
+      payload: 'new_user',
+    );
+  }
+
+  void _checkNewUsers() async {
+    FirebaseFirestore.instance
+        .collection('users')
+        .where('seen', isEqualTo: false) // Only listen for new users that are unapproved
+        .snapshots() // Use snapshots for real-time updates
+        .listen((snapshot) {
+      print("Firestore snapshot received: ${snapshot.docs.length} documents.");
+      if (snapshot.docs.isNotEmpty) {
+        for (var doc in snapshot.docs) {
+          // Check if 'firstName' and 'lastName' exist before accessing them
+          String firstName = doc.data().containsKey('firstName') ? doc['firstName'] : '';
+          String lastName = doc.data().containsKey('lastName') ? doc['lastName'] : '';
+
+          // Combine firstName and lastName
+          String userName = '$firstName $lastName'; // Concatenate firstName and lastName
+          print("User detected: $userName");
+
+          _showNewUserNotification(userName);  // Trigger notification
+        }
+      } else {
+        print("No new users to notify.");
+      }
+    });
+  }
+
 
   @override
   Widget build(BuildContext context) {
     final List<Widget> _bottomNavPages = [
       HomePage(),
       AlertsPageAdmin(),
-      HistoryPage(),
+      HistoryPageAdmin(),
       MenuAdminPage(),
     ];
 
@@ -75,9 +151,26 @@ class _MyHomePageState extends State<MyAdminHomePage> {
 
     return WillPopScope(
       onWillPop: () async {
-        // You can add custom behavior when the back button is pressed here
-        // For example, return true to allow the pop or false to prevent it
-        return false; // This will prevent the default back navigation
+        // Example: Show a confirmation dialog before exiting the app
+        bool shouldExit = await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('Exit App'),
+            content: Text('Do you really want to exit?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false), // Stay in the app
+                child: Text('No'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true), // Exit the app
+                child: Text('Yes'),
+              ),
+            ],
+          ),
+        );
+
+        return shouldExit; // Allow the back navigation if 'Yes' is pressed
       },
       child: Scaffold(
         resizeToAvoidBottomInset: false, // Prevents resizing when Snackbar appears
@@ -169,16 +262,16 @@ class _MyHomePageState extends State<MyAdminHomePage> {
   void _updateTitleBasedOnIndex(int index) {
     switch (index) {
       case 0:
-        _currentTitle = 'Home';
+        _currentTitle = 'Admin Home';
         break;
       case 1:
-        _currentTitle = 'Alerts';
+        _currentTitle = 'Admin Alerts';
         break;
       case 2:
-        _currentTitle = 'History';
+        _currentTitle = 'Admin History';
         break;
       case 3:
-        _currentTitle = 'Menu';
+        _currentTitle = 'Admin Menu';
         break;
       default:
         _currentTitle = 'FitTrack';
