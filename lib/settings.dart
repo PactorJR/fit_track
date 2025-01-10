@@ -1,7 +1,5 @@
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'firebase_options.dart';
 import 'login.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'scan_qr.dart';
@@ -9,21 +7,16 @@ import 'about.dart';
 import 'privacy.dart';
 import 'helpsupport.dart';
 import 'preferences.dart';
+import 'alerts.dart';
+import 'theme_provider.dart';
+import 'package:provider/provider.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  runApp(MyApp());
-}
-
-class MyApp extends StatefulWidget {
+class Settings extends StatefulWidget {
   @override
-  _MyAppState createState() => _MyAppState();
+  _SettingsState createState() => _SettingsState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _SettingsState extends State<Settings> {
   bool _isDarkMode = false; // Initialize the theme with a default value
 
   // Toggles the theme between light and dark modes
@@ -76,9 +69,11 @@ class _MyAppState extends State<MyApp> {
   }
 }
 
+
+
 class SettingsPage extends StatefulWidget {
-  final bool isDarkMode; // Accepts the current theme mode
-  final Function(bool) onThemeChanged; // Callback to toggle the theme
+  final bool isDarkMode;
+  final Function(bool) onThemeChanged;
 
   const SettingsPage({
     Key? key,
@@ -91,15 +86,30 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  bool _isDarkMode = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _isDarkMode = widget.isDarkMode; // Initialize with the passed theme mode
+  Future<void> _proceedToSignOut() async {
+    try {
+      // Sign out the user
+      await _auth.signOut();
+
+      // Set dark mode to false (light mode) when the user logs out
+      final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+      themeProvider.toggleTheme(false); // Set to light mode
+
+      // Notify the Alerts page (if it's open) to cancel notifications
+      alertsPageKey.currentState?.cancelNotificationsOnLogout();
+
+      // Redirect to the LoginPage
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => LoginPage()),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error signing out: $e')),
+      );
+    }
   }
+
 
   Future<void> _signOut() async {
     final User? user = _auth.currentUser;
@@ -160,165 +170,195 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Future<void> _proceedToSignOut() async {
-    try {
-      await _auth.signOut();
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => LoginPage()),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error signing out: $e')),
-      );
-    }
-  }
+  final GlobalKey<AlertsPageState> alertsPageKey = GlobalKey<AlertsPageState>();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    bool isDarkMode = themeProvider.isDarkMode;
     return Scaffold(
-      backgroundColor: _isDarkMode ? Colors.black87 : Colors.green.shade100,
-      body: Stack(
-        children: [
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Container(
-                padding: const EdgeInsets.all(16.0),
-                decoration: BoxDecoration(
-                  color: _isDarkMode ? Colors.grey.shade800 : Colors.green.shade800,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.settings, color: Colors.white, size: 30),
-                        const SizedBox(width: 10),
-                        Text(
-                          'SETTINGS',
-                          style: TextStyle(
-                            fontSize: 24,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+      body: Container(
+        decoration: BoxDecoration(
+          image: DecorationImage(
+            // Switch between background images based on the dark mode
+            image: AssetImage(themeProvider.isDarkMode
+                ? 'assets/images/dark_bg.png'  // Dark mode background
+                : 'assets/images/bg.png'),     // Light mode background
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: Stack(
+          children: [
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Container(
+                  padding: const EdgeInsets.all(16.0),
+                  decoration: BoxDecoration(
+                    color: themeProvider.isDarkMode
+                        ? Colors.grey.shade800
+                        : Colors.green.shade800,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.settings, color: Colors.white, size: 30),
+                          const SizedBox(width: 10),
+                          Text(
+                            'SETTINGS',
+                            style: TextStyle(
+                              fontSize: 24,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
 
-                    // App Theme Option
-                    buildMenuItem(
-                      title: 'App Theme',
-                      icon: Icons.brightness_6,
-                      trailing: Switch(
-                        value: _isDarkMode,
-                        onChanged: (bool value) {
-                          setState(() {
-                            _isDarkMode = value; // Update local state
-                            widget.onThemeChanged(value); // Update global state
-                          });
+                      // Menu items with boxShadow
+                      buildMenuItem(
+                        title: 'App Theme',
+                        icon: Icons.brightness_4,
+                        trailing: Switch(
+                          value: themeProvider.isDarkMode,
+                          onChanged: (bool value) {
+                            themeProvider.toggleTheme(value); // Use provider to update theme globally
+                          },
+                          activeColor: Colors.black87, // Color of the thumb when the switch is ON
+                          activeTrackColor: Colors.grey.shade100, // Color of the track when the switch is ON
+                          inactiveThumbColor: Colors.green.shade800, // Color of the thumb when the switch is OFF
+                          inactiveTrackColor: Colors.white, // Color of the track when the switch is OFF
+                        ),
+                        onTap: () {}, // Add an empty onTap if no specific action is required
+                      ),
+
+                      buildMenuItem(
+                        title: 'Preferences',
+                        icon: Icons.settings,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => PreferencesPage()),
+                          );
                         },
                       ),
-                      onTap: () {}, // Add an empty onTap if no specific action is required
-                    ),
 
-                    // Preferences Option
-                    buildMenuItem(
-                      title: 'Preferences',
-                      icon: Icons.settings,
-                      onTap: () {
-                        // Navigate to Preferences page
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => PreferencesPage()),
-                        );
-                      },
-                    ),
+                      buildMenuItem(
+                        title: 'Help and Support',
+                        icon: Icons.help,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => HelpSupportPage()),
+                          );
+                        },
+                      ),
 
-                    // Help and Support Option
-                    buildMenuItem(
-                      title: 'Help and Support',
-                      icon: Icons.help,
-                      onTap: () {
-                        // Navigate to Help and Support page
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => HelpSupportPage()),
-                        );
-                      },
-                    ),
+                      buildMenuItem(
+                        title: 'Privacy & Security',
+                        icon: Icons.lock,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => PrivacyPage()),
+                          );
+                        },
+                      ),
 
-                    // Privacy & Security Option
-                    buildMenuItem(
-                      title: 'Privacy & Security',
-                      icon: Icons.lock,
-                      onTap: () {
-                        // Navigate to Privacy & Security page
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => PrivacyPage()),
-                        );
-                      },
-                    ),
+                      buildMenuItem(
+                        title: 'About',
+                        icon: Icons.info,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => AboutPage()),
+                          );
+                        },
+                      ),
 
-                    // About Option
-                    buildMenuItem(
-                      title: 'About',
-                      icon: Icons.info,
-                      onTap: () {
-                        // Navigate to About page
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => AboutPage()),
-                        );
-                      },
-                    ),
-
-                    // Logout Option
-                    buildMenuItem(
-                      title: 'Log-Out',
-                      icon: Icons.logout,
-                      onTap: _signOut, // Call the logout function
-                    ),
-                  ],
+                      buildMenuItem(
+                        title: 'Log-Out',
+                        icon: Icons.logout,
+                        onTap: () async {
+                          await _signOut();
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(
+                              builder: (context) => AlertsPage(alertsPageKey: alertsPageKey),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          Positioned(
-            top: 40, // Adjust this value to place the button at the top
-            left: 16, // Horizontal position
-            child: FloatingActionButton(
-              mini: true, // Smaller back button
-              backgroundColor: Colors.green,
-              onPressed: () {
-                Navigator.of(context).pop(); // Navigate back to the previous screen
-              },
-              child: Icon(Icons.arrow_back, color: Colors.white),
+            Positioned(
+              top: 60, // Adjust this value to move the button down
+              left: 16, // Horizontal position
+              child: FloatingActionButton(
+                mini: true, // Smaller back button
+                backgroundColor: isDarkMode ? Colors.grey : Colors.green,
+                onPressed: () {
+                  Navigator.of(context)
+                      .pop(); // Navigate back to the previous screen
+                },
+                child: Icon(Icons.arrow_back, color: Colors.white),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  // Move the buildMenuItem function outside the build method
+
   Widget buildMenuItem({
     required String title,
     required IconData icon,
     Widget? trailing,
     required Function() onTap,
   }) {
-    return ListTile(
-      leading: Icon(icon, color: Colors.white),
-      title: Text(
-        title,
-        style: TextStyle(color: Colors.white),
+    return GestureDetector(
+      onTapDown: (_) {},
+      child: Material(
+        color: Colors.transparent,  // Ensures background is transparent
+        elevation: 0,  // Shadow effect when pressed
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(100),
+        ),
+        child: InkWell(
+          onTap: () async {
+            // First, animate, then navigate
+            await Future.delayed(const Duration(milliseconds: 100));  // Delay to allow animation
+            onTap();  // Navigate after animation
+          },
+          onTapDown: (_) {}, // Optional: can add other effects if needed
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            decoration: BoxDecoration(
+              color: Colors.transparent, // Ensures no background color when not pressed
+              borderRadius: BorderRadius.circular(100),
+            ),
+            child: ListTile(
+              leading: Icon(icon, color: Colors.white),
+              title: Text(
+                title,
+                style: const TextStyle(color: Colors.white),
+              ),
+              trailing: trailing ?? const Icon(Icons.arrow_forward_ios, color: Colors.white),
+            ),
+          ),
+        ),
       ),
-      trailing: trailing ?? Icon(Icons.arrow_forward_ios, color: Colors.white),
-      onTap: onTap,
     );
   }
 }

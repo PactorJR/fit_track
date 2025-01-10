@@ -6,6 +6,8 @@ import 'profile.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'theme_provider.dart';
+import 'package:provider/provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -79,13 +81,20 @@ class _CashInPageState extends State<CashInPage> {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    bool isDarkMode = themeProvider.isDarkMode;
+
     return Scaffold(
       body: Stack(
         children: [
           Container(
             decoration: BoxDecoration(
               image: DecorationImage(
-                image: AssetImage('assets/images/bg.png'),
+                image: AssetImage(
+                  isDarkMode
+                      ? 'assets/images/dark_bg.png'
+                      : 'assets/images/bg.png', // Switch background image based on dark mode
+                ),
                 fit: BoxFit.cover,
               ),
             ),
@@ -99,7 +108,7 @@ class _CashInPageState extends State<CashInPage> {
                       padding: const EdgeInsets.symmetric(
                           vertical: 20.0, horizontal: 24.0),
                       decoration: BoxDecoration(
-                        color: Colors.green.shade800.withOpacity(0.8),
+                        color: isDarkMode ? Colors.white : Colors.green[800],
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
@@ -117,12 +126,15 @@ class _CashInPageState extends State<CashInPage> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                    builder: (context) => ProfilePage()),
+                                  builder: (context) => ProfilePage(),
+                                ),
                               );
                             },
                             child: Container(
                               decoration: BoxDecoration(
-                                color: Colors.green[100],
+                                color: isDarkMode
+                                    ? Colors.black87
+                                    : Colors.green[100],
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               padding: const EdgeInsets.all(16),
@@ -131,7 +143,7 @@ class _CashInPageState extends State<CashInPage> {
                                   StreamBuilder<DocumentSnapshot>(
                                     stream: FirebaseFirestore.instance
                                         .collection('users')
-                                        .doc(_user!.uid)
+                                        .doc(FirebaseAuth.instance.currentUser!.uid) // Fetch the logged-in user's document
                                         .snapshots(),
                                     builder: (context, snapshot) {
                                       if (snapshot.connectionState == ConnectionState.waiting) {
@@ -141,14 +153,33 @@ class _CashInPageState extends State<CashInPage> {
                                         return Text('Error: ${snapshot.error}');
                                       }
                                       if (snapshot.hasData) {
-                                        var userData = snapshot.data;
+                                        // Retrieve the document data as a Map
+                                        Map<String, dynamic>? _userData = snapshot.data!.data() as Map<String, dynamic>?;
+
+                                        // Debug log for the user data
+                                        print('User document data: $_userData');
+
+                                        // Retrieve profileIconIndex or use default and add +1
+                                        int profileIconIndex = _userData != null && _userData['profileIconIndex'] != null
+                                            ? (_userData['profileIconIndex'] as int) + 1
+                                            : 1; // Default to 1 if profileIconIndex is null or missing
+
+                                        // Debug log for the profileIconIndex
+                                        print('Updated profileIconIndex (with +1): $profileIconIndex');
+
                                         return CircleAvatar(
-                                          radius: 40,
-                                          backgroundImage: userData != null && userData.data() != null
-                                              ? AssetImage(
-                                            'assets/images/Icon${(userData.get('profileIconIndex') ?? 1) + 1}.png',
-                                          )
-                                              : AssetImage('assets/images/Icon1.png'),
+                                          radius: 50,
+                                          backgroundColor: Colors.grey[200], // Fallback background color
+                                          backgroundImage: _userData != null &&
+                                              _userData['profileImage'] != null &&
+                                              _userData['profileImage'].isNotEmpty
+                                              ? NetworkImage(_userData['profileImage']) // Display the uploaded image
+                                              : AssetImage('assets/images/Icon$profileIconIndex.png') as ImageProvider, // Display the selected icon
+                                          child: _userData != null &&
+                                              _userData['profileImage'] != null &&
+                                              _userData['profileImage'].isNotEmpty
+                                              ? null // Do not display a child if the profile image is available
+                                              : null, // No child if profileImage is null (AssetImage used instead)
                                         );
                                       }
                                       return Text('No user data found.');
@@ -162,8 +193,7 @@ class _CashInPageState extends State<CashInPage> {
                                         Text(
                                           "${_userData?.get('firstName') ?? 'First Name'} ${_userData?.get('lastName') ?? 'Last Name'}",
                                           style: TextStyle(
-                                              fontSize: 30,
-                                              fontWeight: FontWeight.bold),
+                                              fontSize: 30, fontWeight: FontWeight.bold),
                                         ),
                                         Text(
                                           "User ID: ${_userData?.get('userID') ?? 'Not available'}",
@@ -176,8 +206,7 @@ class _CashInPageState extends State<CashInPage> {
                                         Text(
                                           "Wallet: ₱ ${_userData?.get('wallet') ?? 'Not available'}",
                                           style: TextStyle(
-                                              fontSize: 17,
-                                              fontWeight: FontWeight.bold),
+                                              fontSize: 17, fontWeight: FontWeight.bold),
                                         ),
                                       ],
                                     ),
@@ -193,7 +222,9 @@ class _CashInPageState extends State<CashInPage> {
                     Container(
                       padding: const EdgeInsets.all(20.0),
                       decoration: BoxDecoration(
-                        color: Colors.green.shade800.withOpacity(0.8),
+                        color: isDarkMode
+                            ? Colors.white
+                            : Colors.green.shade800,
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
@@ -205,46 +236,74 @@ class _CashInPageState extends State<CashInPage> {
                         ],
                       ),
                       child: Container(
-                      decoration: BoxDecoration(
-                      color: Colors.green[100],
-                      borderRadius: BorderRadius.circular(10),
-                      ),
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          Text(
-                            "User QR Code",
-                            style: TextStyle(
-                              fontSize: 24,
-                              color: Colors.black54,
-                              fontWeight: FontWeight.bold,
+                        decoration: BoxDecoration(
+                          color: isDarkMode
+                              ? Colors.black87
+                              : Colors.green.shade100.withOpacity(0.8),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            Text(
+                              "User QR Code",
+                              style: TextStyle(
+                                fontSize: 24,
+                                color: isDarkMode ? Colors.white : Colors.black,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 16),
-                          if (_qrData != null)
-                            QrImageView(
-                              data: _qrData!,
-                              version: QrVersions.auto,
-                              size: 325.0,
-                            ),
-                          const SizedBox(height: 8),
-                        ],
+                            const SizedBox(height: 16),
+                            if (_qrData != null)
+                              QrImageView(
+                                data: _qrData!,
+                                version: QrVersions.auto,
+                                size: 325.0,
+                                foregroundColor: isDarkMode ? Colors.white : Colors.black,
+                              ),
+                            const SizedBox(height: 8),
+                          ],
+                        ),
                       ),
-                    ),
                     ),
                   ],
                 ),
               ),
             ),
           ),
+          // Title at the top
           Positioned(
-            top: 60,
-            left: 16,
+            top: 80, // Adjust the top position as needed
+            left: 0, // Start from the left edge of the screen
+            right: 0, // Make it span to the right edge as well
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center, // Center the content horizontally
+              children: [
+                Icon(
+                  Icons.attach_money,
+                  size: 24, // Adjust the icon size as needed
+                  color: isDarkMode ? Colors.white : Colors.green,
+                ),
+                const SizedBox(width: 8), // Adds space between the icon and text
+                Text(
+                  'Cash In',
+                  style: TextStyle(
+                    color: isDarkMode ? Colors.white : Colors.black,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 24,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            top: 60, // Adjust this value to move the button down
+            left: 16, // Horizontal position
             child: FloatingActionButton(
-              mini: true,
-              backgroundColor: Colors.green,
+              mini: true, // Smaller back button
+              backgroundColor: isDarkMode ? Colors.grey : Colors.green,
               onPressed: () {
-                Navigator.of(context).pop();
+                Navigator.of(context).pop(); // Navigate back to the previous screen
               },
               child: Icon(Icons.arrow_back, color: Colors.white),
             ),

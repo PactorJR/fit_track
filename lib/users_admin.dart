@@ -3,6 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:intl/intl.dart';
+import 'theme_provider.dart';
+import 'package:provider/provider.dart';
+import 'theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -12,8 +15,11 @@ void main() async {
 }
 
 class UsersAdminPage extends StatefulWidget {
-  final String userId;
-  UsersAdminPage({required this.userId});
+  final String? userId;  // Make userId nullable (optional)
+
+  // Constructor with an optional userId, defaults to null if not provided
+  UsersAdminPage({this.userId});
+
   @override
   _UsersAdminPageState createState() => _UsersAdminPageState();
 }
@@ -25,6 +31,7 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
   String selectedUserType = 'All'; // Add this to store the selected user type for sorting
   bool seen = false;  // Initialize to a default value
   String seenValue = 'False';  // Set to default 'False' initially
+
   String formatTimestamp(Timestamp timestamp) {
     // Convert Timestamp to DateTime and format it as a String
     DateTime dateTime = timestamp.toDate();
@@ -34,8 +41,12 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
   @override
   void initState() {
     super.initState();
-    selectedUserId = widget.userId;
-    _selectUser(widget.userId);
+
+    // Set selectedUserId to the userId if it's not null, or use a default value if null
+    selectedUserId = widget.userId ?? null; // This makes userId optional
+    if (selectedUserId != null) {
+      _selectUser(selectedUserId!); // Proceed only if userId is not null
+    }
   }
 
   void _selectUser(String userId) {
@@ -71,8 +82,10 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
   }
 
 
-  @override
+@override
   Widget build(BuildContext context) {
+  final themeProvider = Provider.of<ThemeProvider>(context);
+  bool isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
     return Scaffold(
       body: Stack(
         children: [
@@ -80,14 +93,18 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
           Container(
             decoration: BoxDecoration(
               image: DecorationImage(
-                image: AssetImage('assets/images/bg.png'), // Background image
-                fit: BoxFit.cover, // Cover the entire background
+                image: AssetImage(
+                  isDarkMode
+                      ? 'assets/images/dark_bg.png'
+                      : 'assets/images/bg.png', // Switch background image based on dark mode
+                ),
+                fit: BoxFit.cover,
               ),
             ),
           ),
           // Title at the top
           Positioned(
-            top: 40,
+            top: 100,
             left: 0,
             right: 0,
             child: Center(
@@ -97,12 +114,13 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                   Icon(
                     Icons.people,
                     size: 24,
-                    color: Colors.green,
+                    color: isDarkMode ? Colors.white : Colors.green,
                   ),
                   SizedBox(width: 8),
                   Text(
                     'Users',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    style: TextStyle(
+                      color: isDarkMode ? Colors.white : Colors.black,
                       fontWeight: FontWeight.bold,
                       fontSize: 24,
                     ),
@@ -115,13 +133,13 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
           Center(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: 600), // Adjust width constraint as needed
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Search bar
-                    Padding(
+                child: SingleChildScrollView(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: 600),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                      Padding(
                       padding: const EdgeInsets.only(bottom: 16.0),
                       child: TextField(
                         controller: searchController,
@@ -149,32 +167,41 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                       ),
                     ),
                     // Dropdown for sorting by user type
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 16.0),
-                      child: DropdownButtonFormField<String>(
-                        value: selectedUserType,
-                        decoration: InputDecoration(
-                          labelText: 'Filter by User Type',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8.0),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16.0),
+                            child: DropdownButtonFormField<String>(
+                              value: selectedUserType,
+                              decoration: InputDecoration(
+                                labelText: 'Filter by User Type',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8.0),
+                                ),
+                              ),
+                              items: ['All', 'Faculty', 'Student', 'Admin'].map((String type) {
+                                return DropdownMenuItem<String>(
+                                  value: type,
+                                  child: Text(
+                                    type,
+                                    style: TextStyle(
+                                      color: themeProvider.isDarkMode
+                                          ? Colors.white // Black for dark mode
+                                          : Colors.black, // Green for light mode
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (newValue) {
+                                setState(() {
+                                  selectedUserType = newValue!;
+                                });
+                              },
+                            ),
                           ),
-                        ),
-                        items: ['All', 'Faculty', 'Student', 'Admin'].map((String type) {
-                          return DropdownMenuItem<String>(
-                            value: type,
-                            child: Text(type),
-                          );
-                        }).toList(),
-                        onChanged: (newValue) {
-                          setState(() {
-                            selectedUserType = newValue!;
-                          });
-                        },
-                      ),
-                    ),
-                    Container(
+                          Container(
                       decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.8),
+                        color: themeProvider.isDarkMode
+                            ? Colors.black38 // Black for dark mode
+                            : Colors.green.withOpacity(0.8), // Green for light mode
                         borderRadius: BorderRadius.circular(16.0),
                       ),
                       child: Padding(
@@ -188,7 +215,7 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                               style: TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                                color: themeProvider.isDarkMode ? Colors.white : Colors.black, // Dynamic color
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -307,22 +334,26 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                         ],
                                       ),
                                       ...filteredDocs.map((doc) {
-                                        // Check user status and assign appropriate colors
+                                        // Determine the background color based on the user status
                                         bool isBanned = doc['userStatus'] == 'Banned';
                                         bool isOnApproval = doc['userStatus'] == 'On Approval';
-                                        Color textColor = Colors.black; // Default text color
+                                        bool isUnseen = doc['seen'] == false;
+
+                                        Color rowColor = Colors.transparent; // Default row color
 
                                         if (isBanned) {
-                                          textColor = Colors.red; // Red color for banned users
+                                          rowColor = Colors.red.withOpacity(0.8); // Light red for banned users
                                         } else if (isOnApproval) {
-                                          textColor = Colors.blue; // Blue color for users on approval
-                                        } else if (doc['seen'] == false) {
-                                          textColor = Colors.yellow; // Yellow color for users whose 'seen' field is false
+                                          rowColor = Colors.blue.withOpacity(0.8); // Light blue for users on approval
+                                        } else if (isUnseen) {
+                                          rowColor = Colors.yellow.withOpacity(0.8); // Light yellow for unseen users
                                         }
 
                                         return TableRow(
                                           decoration: BoxDecoration(
-                                            color: selectedUserId == doc.id ? Colors.white.withOpacity(0.8) : Colors.transparent,
+                                            color: selectedUserId == doc.id
+                                                ? Colors.white.withOpacity(0.8) // Highlight selected row
+                                                : rowColor, // Apply dynamic row color
                                           ),
                                           children: [
                                             GestureDetector(
@@ -338,7 +369,12 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               child: Container(
                                                 height: 40,
                                                 alignment: Alignment.center,
-                                                child: Text('${doc['firstName'] ?? ''} ${doc['lastName'] ?? ''}', style: TextStyle(color: textColor)),
+                                                child: Text(
+                                                  '${doc['firstName'] ?? ''} ${doc['lastName'] ?? ''}',
+                                                  style: TextStyle(
+                                                    color: themeProvider.isDarkMode ? Colors.white : Colors.black,
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                             GestureDetector(
@@ -354,7 +390,12 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               child: Container(
                                                 height: 40,
                                                 alignment: Alignment.center,
-                                                child: Text(doc['email'] ?? '', style: TextStyle(color: textColor)),
+                                                child: Text(
+                                                  doc['email'] ?? '',
+                                                  style: TextStyle(
+                                                    color: themeProvider.isDarkMode ? Colors.white : Colors.black,
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                             GestureDetector(
@@ -370,7 +411,12 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               child: Container(
                                                 height: 40,
                                                 alignment: Alignment.center,
-                                                child: Text(doc['phone']?.toString() ?? '', style: TextStyle(color: textColor)),
+                                                child: Text(
+                                                  doc['phone']?.toString() ?? '',
+                                                  style: TextStyle(
+                                                    color: themeProvider.isDarkMode ? Colors.white : Colors.black,
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                             GestureDetector(
@@ -386,7 +432,12 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               child: Container(
                                                 height: 40,
                                                 alignment: Alignment.center,
-                                                child: Text(doc['age']?.toString() ?? '', style: TextStyle(color: textColor)),
+                                                child: Text(
+                                                  doc['age']?.toString() ?? '',
+                                                  style: TextStyle(
+                                                    color: themeProvider.isDarkMode ? Colors.white : Colors.black,
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                             GestureDetector(
@@ -402,7 +453,12 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               child: Container(
                                                 height: 40,
                                                 alignment: Alignment.center,
-                                                child: Text(doc['birthday'] ?? '', style: TextStyle(color: textColor)),
+                                                child: Text(
+                                                  doc['birthday'] ?? '',
+                                                  style: TextStyle(
+                                                    color: themeProvider.isDarkMode ? Colors.white : Colors.black,
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                             GestureDetector(
@@ -418,7 +474,12 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               child: Container(
                                                 height: 40,
                                                 alignment: Alignment.center,
-                                                child: Text(doc['userID'] ?? '', style: TextStyle(color: textColor)),
+                                                child: Text(
+                                                  doc['userID'] ?? '',
+                                                  style: TextStyle(
+                                                    color: themeProvider.isDarkMode ? Colors.white : Colors.black,
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                             GestureDetector(
@@ -434,7 +495,12 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               child: Container(
                                                 height: 40,
                                                 alignment: Alignment.center,
-                                                child: Text(doc['userType'] ?? '', style: TextStyle(color: textColor)),
+                                                child: Text(
+                                                  doc['userType'] ?? '',
+                                                  style: TextStyle(
+                                                    color: themeProvider.isDarkMode ? Colors.white : Colors.black,
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                             GestureDetector(
@@ -450,7 +516,12 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               child: Container(
                                                 height: 40,
                                                 alignment: Alignment.center,
-                                                child: Text(doc['wallet']?.toString() ?? '', style: TextStyle(color: textColor)),
+                                                child: Text(
+                                                  doc['wallet']?.toString() ?? '',
+                                                  style: TextStyle(
+                                                    color: themeProvider.isDarkMode ? Colors.white : Colors.black,
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                             GestureDetector(
@@ -466,7 +537,12 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               child: Container(
                                                 height: 40,
                                                 alignment: Alignment.center,
-                                                child: Text(doc['userStatus'] ?? '', style: TextStyle(color: textColor)),
+                                                child: Text(
+                                                  doc['userStatus'] ?? '',
+                                                  style: TextStyle(
+                                                    color: themeProvider.isDarkMode ? Colors.white : Colors.black,
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                             GestureDetector(
@@ -482,7 +558,12 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               child: Container(
                                                 height: 40,
                                                 alignment: Alignment.center,
-                                                child: Text(doc['lastLogin'] ?? '', style: TextStyle(color: textColor)),
+                                                child: Text(
+                                                  doc['lastLogin'] ?? '',
+                                                  style: TextStyle(
+                                                    color: themeProvider.isDarkMode ? Colors.white : Colors.black,
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                             GestureDetector(
@@ -502,7 +583,9 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                                   doc['registerTime'] != null
                                                       ? formatTimestamp(doc['registerTime'])
                                                       : '',
-                                                  style: TextStyle(color: textColor),
+                                                  style: TextStyle(
+                                                    color: themeProvider.isDarkMode ? Colors.white : Colors.black,
+                                                  ),
                                                 ),
                                               ),
                                             ),
@@ -521,7 +604,9 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                                 alignment: Alignment.center,
                                                 child: Text(
                                                   (doc['seen'] != null) ? (doc['seen'] ? 'True' : 'False') : '',
-                                                  style: TextStyle(color: textColor),
+                                                  style: TextStyle(
+                                                    color: themeProvider.isDarkMode ? Colors.white : Colors.black,
+                                                  ),
                                                 ),
                                               ),
                                             ),
@@ -534,41 +619,104 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                               ),
                             ),
                             SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                // Box for "On Approval Users"
+                                Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.yellow,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    'On Approval Users',
+                                    style: TextStyle(
+                                      color: Colors.black,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                                // Box for "Banned Users"
+                                Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    'Banned Users',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                                // Box for "Active Users"
+                                Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    'Active Users',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 16),
                             Padding(
                               padding: const EdgeInsets.only(top: 0.0),
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                                 children: [
                                   ElevatedButton(
-                                    onPressed: _createUser,
+                                    onPressed: _createUser, // Disable if selectedUserId is empty or null
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: isDarkMode ? Colors.white : Colors.white, // Set the background color
+                                    ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min, // Ensure the button size adjusts to its content
                                       children: [
-                                        Icon(Icons.add, color: Colors.green), // Add an icon with green color
+                                        Icon(Icons.add, color: isDarkMode ? Colors.green : Colors.green,), // Change icon color to white to contrast with the green background
                                         SizedBox(width: 8), // Add spacing between the icon and the text
                                         Text(
                                           'Create',
-                                          style: TextStyle(color: Colors.green), // Change text color to green
+                                          style: TextStyle(color: isDarkMode ? Colors.green : Colors.green,), // Change text color to white for visibility on green
                                         ),
                                       ],
                                     ),
                                   ),
                                   ElevatedButton(
-                                    onPressed: selectedUserId != null ? () => _editUser(context) : null,
+                                    onPressed: selectedUserId?.isNotEmpty ?? false ? () => _editUser(context) : null, // Disable if selectedUserId is empty or null
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: selectedUserId?.isNotEmpty ?? false ? Colors.white : Colors.black.withOpacity(0.7), // Set background color based on selectedUserId
+                                    ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.edit, color: Colors.blue),
+                                        Icon(Icons.edit, color: selectedUserId?.isNotEmpty ?? false ? Colors.blue : Colors.blue), // Change icon color based on selectedUserId
                                         SizedBox(width: 8),
                                         Text(
                                           'Edit',
-                                          style: TextStyle(color: Colors.blue),
+                                          style: TextStyle(color: selectedUserId?.isNotEmpty ?? false ? Colors.blue : Colors.blue), // Change text color based on selectedUserId
                                         ),
                                       ],
                                     ),
                                   ),
                                   ElevatedButton(
-                                    onPressed: selectedUserId != null ? () => _showDeleteConfirmationDialog(context) : null,
+                                    onPressed: selectedUserId?.isNotEmpty ?? false ? () => _showDeleteConfirmationDialog(context) : null, // Disable if selectedUserId is empty or null
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: selectedUserId?.isNotEmpty ?? false ? Colors.white : Colors.black.withOpacity(0.7), // Set background color based on selectedUserId
+                                    ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -592,18 +740,23 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                 ),
               ),
             ),
+
+          ),
           ),
           // Positioned button at the top left
           Positioned(
             top: 20,
             left: 16,
-            child: FloatingActionButton(
-              mini: true,
-              backgroundColor: Colors.green,
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: Icon(Icons.arrow_back, color: Colors.white),
+            child: Padding(
+              padding: const EdgeInsets.all(6.0),  // Add padding here
+              child: FloatingActionButton(
+                mini: true,
+                backgroundColor: isDarkMode ? Colors.grey : Colors.green,
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: Icon(Icons.arrow_back, color: Colors.white),
+              ),
             ),
           ),
         ],
@@ -890,6 +1043,8 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    bool isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
     return AlertDialog(
       title: Text('Create User'),
       content: SingleChildScrollView(
@@ -939,8 +1094,14 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
             DropdownButtonFormField<String>(
               value: userType,
               items: [
-                DropdownMenuItem(value: 'Student', child: Text('Student')),
-                DropdownMenuItem(value: 'Faculty', child: Text('Faculty')),
+                DropdownMenuItem(
+                  value: 'Student',
+                  child: Text('Student', style: TextStyle(color: isDarkMode ? Colors.white : Colors.black,)),
+                ),
+                DropdownMenuItem(
+                  value: 'Faculty',
+                  child: Text('Faculty', style: TextStyle(color: isDarkMode ? Colors.white : Colors.black,)),
+                ),
               ],
               onChanged: (value) {
                 setState(() {
@@ -972,8 +1133,10 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
             DropdownButtonFormField<String>(
               value: seenValue, // Set the value to 'True' or 'False' string
               items: [
-                DropdownMenuItem(value: 'True', child: Text('True')),
-                DropdownMenuItem(value: 'False', child: Text('False')),
+                DropdownMenuItem(value: 'True', child: Text('True', style: TextStyle(color: isDarkMode ? Colors.white : Colors.black,)),
+                ),
+                DropdownMenuItem(value: 'False', child: Text('False', style: TextStyle(color: isDarkMode ? Colors.white : Colors.black,)),
+                ),
               ],
               onChanged: (value) {
                 setState(() {

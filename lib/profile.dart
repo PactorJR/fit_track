@@ -3,6 +3,13 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
+import 'theme_provider.dart';
+import 'package:provider/provider.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:path/path.dart'; // For handling file paths
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,6 +39,8 @@ class _ProfilePageState extends State<ProfilePage> {
   late User _user;
   DocumentSnapshot? _userData;
   int? _selectedIconIndex;
+  final ImagePicker _picker = ImagePicker();  // Declare ImagePicker instance
+  XFile? _image;  // Declare _image for storing picked image
 
   @override
   void initState() {
@@ -65,7 +74,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
 
-  Future<void> _editProfile() async {
+  Future<void> _editProfile(BuildContext context) async {
     final TextEditingController firstNameController = TextEditingController(
         text: _userData?.get('firstName') ?? '');
     final TextEditingController lastNameController = TextEditingController(
@@ -79,9 +88,11 @@ class _ProfilePageState extends State<ProfilePage> {
     final TextEditingController birthdayController = TextEditingController(
         text: _userData?.get('birthday') ?? '');
 
+    XFile? selectedImage;
+
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (BuildContext context) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setState) {
             return AlertDialog(
@@ -132,20 +143,23 @@ class _ProfilePageState extends State<ProfilePage> {
                         return GestureDetector(
                           onTap: () {
                             setState(() {
-                              _selectedIconIndex =
-                                  index; // Update the selected icon index
+                              _selectedIconIndex = index;
+                              selectedImage = null; // Reset custom image preview
                             });
                           },
                           child: Container(
                             margin: EdgeInsets.all(4.0),
                             decoration: BoxDecoration(
-                              color: _selectedIconIndex == index ? Colors.blue
-                                  .withOpacity(0.2) : Colors.transparent,
+                              color: _selectedIconIndex == index && selectedImage == null
+                                  ? Colors.green.withOpacity(0.2)
+                                  : Colors.transparent,
                               border: Border.all(
-                                color: _selectedIconIndex == index
-                                    ? Colors.blue
+                                color: _selectedIconIndex == index && selectedImage == null
+                                    ? Colors.green
                                     : Colors.transparent,
-                                width: _selectedIconIndex == index ? 3.0 : 1.0,
+                                width: _selectedIconIndex == index && selectedImage == null
+                                    ? 3.0
+                                    : 1.0,
                               ),
                               borderRadius: BorderRadius.circular(105.0),
                             ),
@@ -162,6 +176,34 @@ class _ProfilePageState extends State<ProfilePage> {
                         );
                       }),
                     ),
+                    SizedBox(height: 10),
+                    Text('Upload Profile Picture'),
+                    selectedImage != null
+                        ? ClipOval(
+                      child: Image.file(
+                        File(selectedImage!.path),
+                        width: 60,
+                        height: 60,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                        : SizedBox(),
+                    ElevatedButton(
+                      onPressed: () async {
+                        selectedImage = await _picker.pickImage(
+                          source: ImageSource.gallery,
+                          imageQuality: 80,
+                          maxWidth: 800,
+                          maxHeight: 800,
+                        );
+                        if (selectedImage != null) {
+                          setState(() {
+                            _selectedIconIndex = null; // Reset selected icon
+                          });
+                        }
+                      },
+                      child: Text('Pick Image'),
+                    ),
                   ],
                 ),
               ),
@@ -174,22 +216,42 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 TextButton(
                   onPressed: () async {
-                    // Update Firestore with new profile data and selected icon index
-                    await FirebaseFirestore.instance.collection('users').doc(
-                        _user.uid).update({
+                    // Prepare updates map
+                    Map<String, dynamic> updates = {
                       'firstName': firstNameController.text,
                       'lastName': lastNameController.text,
                       'email': emailController.text,
                       'phone': phoneController.text,
                       'age': ageController.text,
                       'birthday': birthdayController.text,
-                      'profileIconIndex': _selectedIconIndex ?? 0,
-                      // Update icon index
-                    });
+                    };
 
-                    // Close the dialog and refresh user data
+                    if (selectedImage != null) {
+                      // User has uploaded an image
+                      File imageFile = File(selectedImage!.path);
+                      String filePath = 'userProfiles/${_user.uid}/${basename(selectedImage!.path)}';
+                      TaskSnapshot uploadTask = await FirebaseStorage.instance
+                          .ref(filePath)
+                          .putFile(imageFile);
+                      String downloadURL = await uploadTask.ref.getDownloadURL();
+
+                      // Update Firestore with the uploaded image
+                      updates['profileImage'] = downloadURL;
+                      updates['profileIconIndex'] = 0; // Reset icon index
+                    } else if (_selectedIconIndex != null) {
+                      // User has selected a profile icon
+                      updates['profileIconIndex'] = _selectedIconIndex;
+                      updates['profileImage'] = null; // Clear image
+                    }
+
+                    // Save updates to Firestore
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(_user.uid)
+                        .update(updates);
+
                     Navigator.of(context).pop();
-                    _fetchUserData();
+                    _fetchUserData(); // Refresh user data
                   },
                   child: Text('Save'),
                 ),
@@ -201,8 +263,12 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+
+
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    bool isDarkMode = themeProvider.isDarkMode;
     return Scaffold(
       body: Stack(
         children: [
@@ -210,8 +276,12 @@ class _ProfilePageState extends State<ProfilePage> {
           Container(
             decoration: BoxDecoration(
               image: DecorationImage(
-                image: AssetImage('assets/images/bg.png'), // Background image
-                fit: BoxFit.cover, // Cover the entire container
+                image: AssetImage(
+                  isDarkMode
+                      ? 'assets/images/dark_bg.png'
+                      : 'assets/images/bg.png', // Switch background image based on dark mode
+                ),
+                fit: BoxFit.cover,
               ),
             ),
           ),
@@ -229,17 +299,14 @@ class _ProfilePageState extends State<ProfilePage> {
                 Icon(
                   Icons.person,
                   size: 24, // Adjust the icon size as needed
-                  color: Colors.green, // Set the icon color
+                  color: Provider.of<ThemeProvider>(context).isDarkMode ? Colors.white : Colors.green,
                 ),
                 Text(
                   'Profile',
-                  style: Theme
-                      .of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(
+                  style: TextStyle(
+                    color: isDarkMode ? Colors.white : Colors.black,
                     fontWeight: FontWeight.bold,
-                    fontSize: 24, // Adjust the font size as needed
+                    fontSize: 24,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -254,8 +321,9 @@ class _ProfilePageState extends State<ProfilePage> {
               child: Container(
                 padding: EdgeInsets.all(16.0),
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(1),
-                  // Slightly transparent green background
+                  color: Provider.of<ThemeProvider>(context).isDarkMode
+                      ? Colors.black38
+                      : Colors.green.shade800,
                   borderRadius: BorderRadius.circular(16.0),
                 ),
                 child: Column(
@@ -265,23 +333,27 @@ class _ProfilePageState extends State<ProfilePage> {
                       children: [
                         CircleAvatar(
                           radius: 50,
-                          backgroundColor: Colors.white,
-                          backgroundImage: AssetImage(
-                            'assets/images/Icon${_selectedIconIndex != null
-                                ? _selectedIconIndex! + 1
-                                : 1}.png',
-                          ),
+                          backgroundColor: Colors.grey[200], // Fallback background color
+                          backgroundImage: _image != null
+                              ? FileImage(File(_image!.path)) // Use FileImage for local file paths
+                              : (_userData?.get('profileImage') != null && _userData!.get('profileImage').isNotEmpty
+                              ? NetworkImage(_userData!.get('profileImage')) // Use NetworkImage for Firebase URL
+                              : AssetImage('assets/images/Icon${_selectedIconIndex != null ? _selectedIconIndex! + 1 : 1}.png') as ImageProvider),
+                          child: null, // No child, remove fallback icon
                         ),
                         Positioned(
                           bottom: 0,
                           right: 0,
                           child: CircleAvatar(
-                            backgroundColor: Colors.blue,
+                            backgroundColor: Provider.of<ThemeProvider>(context).isDarkMode
+                                ? Colors.black
+                                : Colors.green.shade800,
                             radius: 15,
                             child: IconButton(
-                              icon: Icon(
-                                  Icons.edit, size: 15, color: Colors.white),
-                              onPressed: _editProfile,
+                              icon: Icon(Icons.edit, size: 15, color: Colors.white),
+                              onPressed: () {
+                                _editProfile(context); // Trigger profile editing dialog
+                              },
                             ),
                           ),
                         ),
@@ -340,7 +412,7 @@ class _ProfilePageState extends State<ProfilePage> {
             left: 16, // Horizontal position
             child: FloatingActionButton(
               mini: true, // Smaller back button
-              backgroundColor: Colors.green,
+              backgroundColor: isDarkMode ? Colors.grey : Colors.green,
               onPressed: () {
                 Navigator.of(context)
                     .pop(); // Navigate back to the previous screen

@@ -8,6 +8,8 @@ import 'create_qr.dart';
 import 'dart:async';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'theme_provider.dart';
+import 'package:provider/provider.dart';
 
 class ScanPage extends StatefulWidget {
   @override
@@ -22,7 +24,9 @@ class _QRScannerState extends State<ScanPage> {
   bool _hasLoggedIn = false;
   Timer? _debounce;
   DateTime? _lastScanTime;
-  late WebViewController _webViewController;  // Define WebViewController for WebView widget
+  late WebViewController _webViewController; // Define WebViewController for WebView widget
+  User? currentUser = FirebaseAuth.instance.currentUser;
+  Timer? _resetTimer; // Timer for resetting the QR scanner text
 
   @override
   void reassemble() {
@@ -34,7 +38,17 @@ class _QRScannerState extends State<ScanPage> {
   }
 
   @override
+  void dispose() {
+    _controller?.dispose();
+    _debounce?.cancel();
+    _resetTimer?.cancel(); // Dispose of the reset timer
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    bool isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
     return Scaffold(
       body: Stack(
         children: [
@@ -56,18 +70,30 @@ class _QRScannerState extends State<ScanPage> {
               ),
               Expanded(
                 flex: 1,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      _result.isEmpty
-                          ? 'Scan a QR code'
-                          : 'Scanned Successfully',
-                      style: TextStyle(fontSize: 20),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+                child: Container(
+                  width: double.infinity, // Ensures the container takes the full width
+                  height: double.infinity, // Ensures the container takes the full height
+                  color: isDarkMode
+                      ? Colors.white
+                      : Colors.green[700], // Dynamic background color
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        _result.isEmpty
+                            ? 'Scan a QR code'
+                            : 'Scanned Successfully',
+                        style: TextStyle(
+                          fontSize: 20,
+                          color: isDarkMode
+                              ? Colors.black
+                              : Colors.white, // Dynamic text color
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -77,7 +103,7 @@ class _QRScannerState extends State<ScanPage> {
             left: 20, // Adjust the alignment from the left
             child: FloatingActionButton(
               mini: true, // Smaller back button
-              backgroundColor: Colors.green,
+              backgroundColor: isDarkMode ? Colors.grey : Colors.green,
               onPressed: () {
                 Navigator.pop(context); // Navigate back to the previous screen
               },
@@ -87,7 +113,6 @@ class _QRScannerState extends State<ScanPage> {
         ],
       ),
     );
-
   }
 
   void _proceedToSignOut() {
@@ -109,17 +134,25 @@ class _QRScannerState extends State<ScanPage> {
         _result = code;
       });
 
+      // Cancel any previous debounce timers
       _debounce?.cancel();
+
+      // Pause the camera
+      _controller?.pauseCamera();
+
       _debounce = Timer(Duration(seconds: 1), () async {
         User? user = FirebaseAuth.instance.currentUser;
         if (user == null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("No user logged in"),
-              behavior: SnackBarBehavior.floating, // Floating snackbar
+            SnackBar(
+              content: Text("No user logged in"),
+              behavior: SnackBarBehavior.floating,
               duration: Duration(seconds: 2),
             ),
-
           );
+
+          // Resume the camera after showing the snackbar
+          _controller?.resumeCamera();
           return;
         }
 
@@ -131,30 +164,31 @@ class _QRScannerState extends State<ScanPage> {
 
         if (!userDoc.exists) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("User document not found"),
-              behavior: SnackBarBehavior.floating, // Floating snackbar
+            SnackBar(
+              content: Text("User document not found"),
+              behavior: SnackBarBehavior.floating,
               duration: Duration(seconds: 2),
             ),
           );
+
+          // Resume the camera after showing the snackbar
+          _controller?.resumeCamera();
           return;
         }
 
         String firstName = userDoc['firstName'] ?? 'Unknown';
         String lastName = userDoc['lastName'] ?? 'Unknown';
-        String userType = userDoc['userType'] ?? 'User'; // Get userType
+        String userType = userDoc['userType'] ?? 'User';
 
-        if (code == "https://youtu.be/yWnacRo2VbA?si=S8JUbMKu-0lAFctJ") {
-          // Launch the YouTube video URL
+        // Handle different F code cases
+        if (code == "https://youtu.be/92P2aD0f8IU?si=VwUvTRzh8ayDXUPN" ||
+            code == "https://youtu.be/a8aRY6e-oyI?si=-wTlkemy0DRhldsI" ||
+            code == "https://youtu.be/uXKo6MHQ9WM?si=pyk4ayf9CmaYRrHU" ||
+            code == "https://youtu.be/9ZQYw1Ysqvg?si=lN2_2UV1scXcX4AG" ||
+            code == "https://youtu.be/gPx6ePgVFss?si=3Cj5GaYeYZkkQfU8") {
           await _launchURL(code);
-          return;
-        } else if (code == "https://youtu.be/JyV7mUFSpXs?si=p5-V_q6kyIqBrIbD"){
-          await _launchURL(code);
-          return;
-        } else if (code == "https://youtu.be/Swu1pxRJ4m4?si=M5THkeRSfAVBSr6s"){
-          await _launchURL(code);
-          return;
-        } else if (code == "https://youtu.be/eGo4IYlbE5g?si=lR9e2JfjwZyXOGOd"){
-          await _launchURL(code);
+          // Resume the camera after handling the URL
+          _controller?.resumeCamera();
           return;
         }
 
@@ -165,16 +199,37 @@ class _QRScannerState extends State<ScanPage> {
         } else {
           _handleAmountAddition(code, user, userType);
         }
+
+        // Resume the camera after handling the QR code
+        _controller?.resumeCamera();
       });
     });
   }
 
 // Handle login logic
   Future<void> _handleLogin(User user, String firstName, String lastName) async {
-    // Check if the user is already logged in
+    // First, get the actual 'userID' from the 'users' collection using the Firebase UID
+    DocumentSnapshot userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid) // Using Firebase UID to get the user's document
+        .get();
+
+    if (!userDoc.exists) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("User not found in 'users' collection."),
+          behavior: SnackBarBehavior.floating, // Floating snackbar
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    String actualUserID = userDoc['userID'];
+
     QuerySnapshot loginRecord = await FirebaseFirestore.instance
         .collection('logintime')
-        .where('userID', isEqualTo: user.uid)
+        .where('userID', isEqualTo: actualUserID)
         .orderBy('scannedTime', descending: true)
         .limit(1)
         .get();
@@ -185,63 +240,91 @@ class _QRScannerState extends State<ScanPage> {
 
       if (!loggedOut) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("You are already logged in!"),
+          SnackBar(
+            content: Text("You are already logged in!"),
             behavior: SnackBarBehavior.floating, // Floating snackbar
             duration: Duration(seconds: 2),
           ),
         );
       } else {
         // Check user's wallet balance before allowing login
-        DocumentSnapshot userDoc = await FirebaseFirestore.instance
-            .collection('users') // Collection is 'users'
-            .doc(user.uid) // Use user ID to get their document
-            .get();
-
-        if (userDoc.exists) {
-          // Cast wallet balance to double
-          double walletBalance = (userDoc['wallet'] is int)
-              ? (userDoc['wallet'] as int).toDouble()
-              : userDoc['wallet'] ?? 0.0;
-
-          // Subtract 30 from the wallet balance
-          double newBalance = walletBalance - 30;
-
-          // Assuming you want to check if the balance after deduction is sufficient
-          double minimumBalanceRequired = 30.0; // Set this to your required minimum balance
-
-          if (newBalance >= minimumBalanceRequired) {
-            // Update the wallet balance in Firestore
-            await FirebaseFirestore.instance
-                .collection('users')
-                .doc(user.uid)
-                .update({'wallet': newBalance});
-
-            // Log the user in if they are logged out and have enough balance
-            await _logUserLogin(user.uid, firstName, lastName);
-          } else {
-            // If the user doesn't have enough balance after deduction, show a message
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Insufficient balance."),
-                behavior: SnackBarBehavior.floating, // Floating snackbar
-                duration: Duration(seconds: 2),
-              ),
-            );
-          }
-        } else {
-          // Handle case where the user document doesn't exist in the 'users' collection
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("User not found."),
-              behavior: SnackBarBehavior.floating,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
+        await _processLogin(user, actualUserID, firstName, lastName);
       }
     } else {
-      // No previous login record found; log the user in
-      await _logUserLogin(user.uid, firstName, lastName);
+      // No previous login record found; proceed to check wallet balance and login
+      await _processLogin(user, actualUserID, firstName, lastName);
     }
   }
+
+  Future<void> _processLogin(
+      User user, String actualUserID, String firstName, String lastName) async {
+    DocumentSnapshot userDoc = await FirebaseFirestore.instance
+        .collection('users') // Collection is 'users'
+        .doc(user.uid) // Use user ID to get their document
+        .get();
+
+    if (userDoc.exists) {
+      // Get and handle the wallet balance
+      double walletBalance = (userDoc['wallet'] is int)
+          ? (userDoc['wallet'] as int).toDouble()
+          : userDoc['wallet'] ?? 0.0;
+
+      // Check if the balance is enough for the login (before and after deduction)
+      if (walletBalance >= 30.0) {
+        // Subtract 30 from the wallet balance
+        double newBalance = walletBalance - 30;
+
+        // Update the wallet balance in Firestore
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update({'wallet': newBalance});
+
+        // Log the user in
+        await _logUserLogin(firstName, lastName);
+
+        // Update the 'loggedOut' field to false in the last login record
+        QuerySnapshot loginRecord = await FirebaseFirestore.instance
+            .collection('logintime')
+            .where('userID', isEqualTo: actualUserID)
+            .orderBy('scannedTime', descending: true)
+            .limit(1)
+            .get();
+
+        if (loginRecord.docs.isNotEmpty) {
+          await loginRecord.docs.first.reference.update({'loggedOut': false});
+        } else {
+          // If no record exists, create a new one
+          await FirebaseFirestore.instance.collection('logintime').add({
+            'userID': actualUserID,
+            'firstName': firstName,
+            'lastName': lastName,
+            'scannedTime': Timestamp.now(),
+            'loggedOut': false, // Set to false for the new login
+          });
+        }
+      } else {
+        // If the user doesn't have enough balance, show a message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Insufficient balance. Please add funds to your wallet."),
+            behavior: SnackBarBehavior.floating, // Floating snackbar
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } else {
+      // Handle case where the user document doesn't exist in the 'users' collection
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("User not found."),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
 
 // Handle logout logic
   Future<void> _handleLogout(User user) async {
@@ -319,7 +402,10 @@ class _QRScannerState extends State<ScanPage> {
       if (currentUser == null) {
         // Handle case where there is no authenticated user
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("User is not authenticated."), duration: Duration(seconds: 2)),
+          SnackBar(
+            content: Text("User is not authenticated."),
+            duration: Duration(seconds: 2),
+          ),
         );
         return;
       }
@@ -331,7 +417,10 @@ class _QRScannerState extends State<ScanPage> {
       if (!userSnapshot.exists) {
         // Handle case where the user document doesn't exist
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("User data not found."), duration: Duration(seconds: 2)),
+          SnackBar(
+            content: Text("User data not found."),
+            duration: Duration(seconds: 2),
+          ),
         );
         return;
       }
@@ -348,13 +437,38 @@ class _QRScannerState extends State<ScanPage> {
       DocumentSnapshot loginSnapshot = await loginDocRef.get();
 
       if (loginSnapshot.exists) {
+
+        String getDayName(int weekday) {
+          switch (weekday) {
+            case 1: return 'monday';
+            case 2: return 'tuesday';
+            case 3: return 'wednesday';
+            case 4: return 'thursday';
+            case 5: return 'friday';
+            case 6: return 'saturday';
+            case 7: return 'sunday';
+            default: return '';
+          }
+        }
+
+        // Create a new entry in the 'loghistory' collection
+        await FirebaseFirestore.instance.collection('loghistory').add({
+          'firstName': firstName,
+          'lastName': lastName,
+          'scannedQR': "http://www.FitTrack_Logout.com",
+          'scannedTime': FieldValue.serverTimestamp(),
+          'seen': false,
+          'type': "logout",
+          'day': getDayName(DateTime.now().weekday),
+          'userID': actualUserID,
+        });
         // If the document exists, update the 'loggedOut' field in the 'logintime' collection
         await loginDocRef.update({
           'loggedOut': true,  // Setting loggedOut to true (user has logged out)
           'scannedTime': FieldValue.serverTimestamp(), // Automatically set to the current server time
         });
 
-        // Now, create a new entry in the 'logouttime' collection with the necessary data
+        // Create a new entry in the 'logouttime' collection
         await FirebaseFirestore.instance.collection('logouttime').doc(actualUserID).set({
           'firstName': firstName,
           'lastName': lastName,
@@ -365,7 +479,8 @@ class _QRScannerState extends State<ScanPage> {
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Logout recorded successfully"),
+          SnackBar(
+            content: Text("Logout recorded successfully"),
             behavior: SnackBarBehavior.floating, // Floating snackbar
             duration: Duration(seconds: 2),
           ),
@@ -373,7 +488,8 @@ class _QRScannerState extends State<ScanPage> {
       } else {
         // Handle case where the document does not exist in the 'logintime' collection
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("No login record found for this user."),
+          SnackBar(
+            content: Text("No login record found for this user."),
             behavior: SnackBarBehavior.floating, // Floating snackbar
             duration: Duration(seconds: 2),
           ),
@@ -384,7 +500,8 @@ class _QRScannerState extends State<ScanPage> {
       _proceedToSignOut();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error logging out: $e"),
+        SnackBar(
+          content: Text("Error logging out: $e"),
           behavior: SnackBarBehavior.floating, // Floating snackbar
           duration: Duration(seconds: 2),
         ),
@@ -392,8 +509,20 @@ class _QRScannerState extends State<ScanPage> {
     }
   }
 
-// Handle adding amount to user's wallet
+
   Future<void> _handleAmountAddition(String code, User user, String userType) async {
+    // First check if the current user is an admin
+    if (userType != 'Admin') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Only administrators can add amounts to wallets."),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return; // Exit the function early if not an admin
+    }
+
     final regex = RegExp(r'^(20[2-9]\d{2}\d+)$'); // Regex to match valid userID (2020+)
     final match = regex.firstMatch(code);
 
@@ -466,24 +595,27 @@ class _QRScannerState extends State<ScanPage> {
           await _addAmountToWallet(scannedUserID, amount);
 
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Added $amount to user ID: $scannedUserID's wallet."),
-              behavior: SnackBarBehavior.floating, // Floating snackbar
+            SnackBar(
+              content: Text("Added $amount to user ID: $scannedUserID's wallet."),
+              behavior: SnackBarBehavior.floating,
               duration: Duration(seconds: 2),
             ),
           );
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Invalid amount entered. Please try again."),
-            behavior: SnackBarBehavior.floating, // Floating snackbar
+          SnackBar(
+            content: Text("Invalid amount entered. Please try again."),
+            behavior: SnackBarBehavior.floating,
             duration: Duration(seconds: 2),
           ),
         );
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Scanned unknown QR code: $code"),
-          behavior: SnackBarBehavior.floating, // Floating snackbar
+        SnackBar(
+          content: Text("Scanned unknown QR code: $code"),
+          behavior: SnackBarBehavior.floating,
           duration: Duration(seconds: 2),
         ),
       );
@@ -512,13 +644,15 @@ class _QRScannerState extends State<ScanPage> {
             onHttpError: (HttpResponseError error) {},
             onWebResourceError: (WebResourceError error) {},
             onNavigationRequest: (NavigationRequest request) {
-              if (request.url.startsWith('https://youtu.be/yWnacRo2VbA?si=S8JUbMKu-0lAFctJ')) {
+              if (request.url.startsWith('https://youtu.be/92P2aD0f8IU?si=VwUvTRzh8ayDXUPN')) {
                 return NavigationDecision.prevent;
-              } else if (request.url.startsWith('https://youtu.be/JyV7mUFSpXs?si=p5-V_q6kyIqBrIbD')) {
+              } else if (request.url.startsWith('https://youtu.be/a8aRY6e-oyI?si=-wTlkemy0DRhldsI')) {
                 return NavigationDecision.prevent;
-              } else if (request.url.startsWith('https://youtu.be/Swu1pxRJ4m4?si=M5THkeRSfAVBSr6s')) {
+              } else if (request.url.startsWith('https://youtu.be/uXKo6MHQ9WM?si=pyk4ayf9CmaYRrHU')) {
                 return NavigationDecision.prevent;
-              } else if (request.url.startsWith('https://youtu.be/eGo4IYlbE5g?si=lR9e2JfjwZyXOGOd')) {
+              } else if (request.url.startsWith('https://youtu.be/9ZQYw1Ysqvg?si=lN2_2UV1scXcX4AG')) {
+                return NavigationDecision.prevent;
+              } else if (request.url.startsWith('https://youtu.be/gPx6ePgVFss?si=3Cj5GaYeYZkkQfU8')) {
                 return NavigationDecision.prevent;
               }
               return NavigationDecision.navigate;
@@ -594,6 +728,7 @@ class _QRScannerState extends State<ScanPage> {
           'userID': scannedUserID,
           'userName': userName,
           'scannedTime': FieldValue.serverTimestamp(), // Automatically add timestamp
+          'seen' : false,
         });
 
         print("Cash-in transaction logged successfully for user ID: $scannedUserID.");
@@ -606,13 +741,16 @@ class _QRScannerState extends State<ScanPage> {
     }
   }
 
-  Future<void> _logUserLogin(String userID, String firstName, String lastName) async {
+  Future<void> _logUserLogin(String firstName, String lastName) async {
     // Get the current FirebaseAuth user
     User? currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
       // Handle case where there is no authenticated user
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("User is not authenticated."), duration: Duration(seconds: 2)),
+        SnackBar(
+          content: Text("User is not authenticated."),
+          duration: Duration(seconds: 2),
+        ),
       );
       return;
     }
@@ -626,7 +764,10 @@ class _QRScannerState extends State<ScanPage> {
     if (!userSnapshot.exists) {
       // Handle case where the user document doesn't exist
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("User data not found."), duration: Duration(seconds: 2)),
+        SnackBar(
+          content: Text("User data not found."),
+          duration: Duration(seconds: 2),
+        ),
       );
       return;
     }
@@ -635,25 +776,43 @@ class _QRScannerState extends State<ScanPage> {
     String actualUserID = userSnapshot['userID'] ?? ''; // Assuming the field is 'userID'
 
     // Reference to the login document for the given userID
-    DocumentReference loginDocRef = FirebaseFirestore.instance.collection('logintime').doc(actualUserID);
+    DocumentReference loginDocRef = FirebaseFirestore.instance
+        .collection('logouttime')
+        .doc(actualUserID); // Directly use currentUser.uid as document ID
 
     // Check if a document already exists for the given userID
     DocumentSnapshot loginSnapshot = await loginDocRef.get();
 
     if (loginSnapshot.exists) {
-      // If the document exists, update the 'loggedOut' field to false
       await loginDocRef.update({
-        'loggedOut': false,
-        'scannedTime': FieldValue.serverTimestamp(), // Automatically set to the current server time
+        'loggedIn': true,
+        'scannedTime': FieldValue.serverTimestamp() ?? Timestamp.now(), // Fallback if serverTimestamp() is null
       });
+
+      await FirebaseFirestore.instance.collection('loghistory').add({
+        'firstName': firstName,
+        'lastName': lastName,
+        'scannedQR': "http://www.FitTrack_Login.com",
+        'scannedTime': FieldValue.serverTimestamp() ?? Timestamp.now(), // Fallback if serverTimestamp() is null
+        'seen': false,
+        'type': "login",
+        'day': getDayName(DateTime.now().weekday),
+        'userID': actualUserID,
+      });
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Welcome back! You've successfully logged in."),
+        SnackBar(
+          content: Text("Welcome back! You've successfully logged in."),
           behavior: SnackBarBehavior.floating, // Floating snackbar
           duration: Duration(seconds: 2),
         ),
       );
     } else {
-      // If the document does not exist, create a new document for this user
+      // If no document exists for the user, create a new login record
+      DocumentReference loginDocRef = FirebaseFirestore.instance
+          .collection('logintime')
+          .doc(actualUserID); // Use actualUserID as the document ID
+
       await loginDocRef.set({
         'firstName': firstName,
         'lastName': lastName,
@@ -662,8 +821,22 @@ class _QRScannerState extends State<ScanPage> {
         'scannedTime': FieldValue.serverTimestamp(), // Automatically set to the current server time
         'userID': actualUserID, // Store the actual userID from the 'users' collection
       });
+
+      // Add entry to the 'loghistory' collection
+      await FirebaseFirestore.instance.collection('loghistory').add({
+        'firstName': firstName,
+        'lastName': lastName,
+        'scannedQR': "http://www.FitTrack_Login.com",
+        'scannedTime': FieldValue.serverTimestamp(),
+        'seen': false,
+        'type': "login",
+        'day': getDayName(DateTime.now().weekday),
+        'userID': actualUserID,
+      });
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("You have successfully logged in."),
+        SnackBar(
+          content: Text("You have successfully logged in."),
           behavior: SnackBarBehavior.floating, // Floating snackbar
           duration: Duration(seconds: 2),
         ),
@@ -671,10 +844,17 @@ class _QRScannerState extends State<ScanPage> {
     }
   }
 
-  @override
-  void dispose() {
-    _controller?.dispose();
-    _debounce?.cancel();
-    super.dispose();
+  String getDayName(int weekday) {
+    switch (weekday) {
+      case 1: return 'monday';
+      case 2: return 'tuesday';
+      case 3: return 'wednesday';
+      case 4: return 'thursday';
+      case 5: return 'friday';
+      case 6: return 'saturday';
+      case 7: return 'sunday';
+      default: return '';
+    }
   }
+
 }

@@ -48,7 +48,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _obscurePassword = true; // Variable to manage the visibility state of the password
   bool _isLoading = false; // Loading state
   String errorMessage = ''; // Variable to hold error messages
-  bool _rememberMe = false; // Track whether the user selects "Remember Me"
+  bool rememberMe = false; // Track whether the user selects "Remember Me"
   final FlutterSecureStorage storage = FlutterSecureStorage();
 
   // Method to toggle password visibility
@@ -72,8 +72,7 @@ class _LoginPageState extends State<LoginPage> {
 
       if (user != null) {
         // Get user status from Firestore
-        DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection(
-            'users').doc(user.uid).get();
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
         String userStatus = userDoc['userStatus'];
 
         // Check if user is "Active"
@@ -84,22 +83,22 @@ class _LoginPageState extends State<LoginPage> {
           if (userType == 'Admin') {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (context) =>
-                  MyAdminHomePage(title: 'FitTrack Home')),
+              MaterialPageRoute(builder: (context) => MyAdminHomePage(title: 'FitTrack Home')),
             );
           } else {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(
-                  builder: (context) => MyHomePage(title: 'Home')),
+              MaterialPageRoute(builder: (context) => MyHomePage(title: 'Home')),
             );
           }
         } else {
           // Handle if the user status is not "Active"
-          FirebaseAuth.instance
-              .signOut(); // Sign out the user if status is not active
+          FirebaseAuth.instance.signOut(); // Sign out the user if status is not active
         }
       }
+    } else {
+      // If 'rememberMe' is false, the user is not auto-logged in
+      print("Auto-login is disabled.");
     }
   }
 
@@ -122,7 +121,7 @@ class _LoginPageState extends State<LoginPage> {
       );
 
       // Store the "remember me" status securely
-      if (_rememberMe) {
+      if (rememberMe) {
         await storage.write(key: 'isRemembered', value: 'true');
       }
 
@@ -205,6 +204,7 @@ class _LoginPageState extends State<LoginPage> {
       setState(() {
         errorMessage = 'Wrong username or password!';
       });
+      _passwordController.clear(); // Clear the password field
     } finally {
       setState(() {
         _isLoading = false; // Hide loading indicator
@@ -325,17 +325,20 @@ class _LoginPageState extends State<LoginPage> {
                       child: Row(
                         children: [
                           Checkbox(
-                            value: _rememberMe,
+                            value: rememberMe,
                             onChanged: (value) {
                               setState(() {
-                                _rememberMe = value!;
+                                rememberMe = value!;
                               });
+                              // Save the updated value to secure storage
+                              storage.write(key: 'isRemembered', value: rememberMe.toString());
                             },
                           ),
                           Text("Remember Me"),
                         ],
                       ),
                     ),
+
 
                     // Error Message
                     if (errorMessage.isNotEmpty)

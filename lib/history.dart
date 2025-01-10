@@ -2,6 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'history_desc.dart';
+import 'theme_provider.dart';
+import 'package:provider/provider.dart';
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({Key? key}) : super(key: key);
@@ -11,58 +14,212 @@ class HistoryPage extends StatefulWidget {
 }
 
 class _HistoryPageState extends State<HistoryPage> {
-  String _selectedFilter = 'All'; // Default filter
+  String? userID; // Declare at the top to store the userID
+  String _selectedFilter = 'Cashin'; // Default filter
+
+  Future<List<QueryDocumentSnapshot>> _getCombinedLogs(String? userID) async {
+    if (userID == null) return [];
+
+    try {
+      final loginQuery = FirebaseFirestore.instance
+          .collection('loghistory')
+          .where('userID', isEqualTo: userID)
+          .where('type', isEqualTo: "login")
+          .orderBy('scannedTime', descending: true)
+          .get();
+
+      final logoutQuery = FirebaseFirestore.instance
+          .collection('loghistory')
+          .where('userID', isEqualTo: userID)
+          .where('type', isEqualTo: "logout")
+          .orderBy('scannedTime', descending: true)
+          .get();
+
+      final cashInQuery = FirebaseFirestore.instance
+          .collection('cashinlogs')
+          .where('userID', isEqualTo: userID)
+          .orderBy('scannedTime', descending: true)
+          .get();
+
+      final results = await Future.wait([loginQuery, logoutQuery, cashInQuery]);
+
+      final allLogs = [
+        ...results[0].docs,
+        ...results[1].docs,
+        ...results[2].docs
+      ];
+      allLogs.sort((a, b) => (b['scannedTime'] as Timestamp)
+          .compareTo(a['scannedTime'] as Timestamp));
+
+      return allLogs;
+    } catch (e) {
+      debugPrint("Error fetching logs: $e");
+      return [];
+    }
+  }
 
   Future<String?> _getUserID() async {
     User? currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
-      return null;
+      return null; // User is not authenticated, return null
     }
+
     DocumentSnapshot userDoc = await FirebaseFirestore.instance
         .collection('users')
         .doc(currentUser.uid)
         .get();
 
     if (userDoc.exists) {
-      return userDoc.get('userID') as String?;
+      return userDoc.get('userID') as String?; // Ensure it returns a String? value
     } else {
-      return null;
+      return null; // User document does not exist, return null
     }
   }
 
-  Future<List<QueryDocumentSnapshot>> _getCombinedLogs(String? userID) async {
-    if (userID == null) return [];
 
-    final loginQuery = FirebaseFirestore.instance
-        .collection('logintime')
-        .where('userID', isEqualTo: userID)
-        .orderBy('scannedTime', descending: true)
-        .get();
+  @override
+  Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    bool isDarkMode = themeProvider.isDarkMode;
+    return WillPopScope(
+      onWillPop: () async {
+        return false; // Prevent the user from navigating back.
+      },
+      child: Scaffold(
+        body: FutureBuilder<String?>(
+          future: _getUserID(), // Fetch the userID asynchronously
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (!snapshot.hasData) {
+              return const Center(child: Text('User not authenticated or userID not found.'));
+            }
 
-    final logoutQuery = FirebaseFirestore.instance
-        .collection('logouttime')
-        .where('userID', isEqualTo: userID)
-        .orderBy('scannedTime', descending: true)
-        .get();
+            final userID = snapshot.data; // Get the userID from snapshot
 
-    final cashInQuery = FirebaseFirestore.instance
-        .collection('cashinlogs')
-        .where('userID', isEqualTo: userID)
-        .orderBy('scannedTime', descending: true)
-        .get();
+            return Stack(
+              children: [
+                // Background container with the image
+                Container(
+                  decoration: BoxDecoration(
+                    image: DecorationImage(
+                      image: AssetImage(
+                        isDarkMode
+                            ? 'assets/images/dark_bg.png'
+                            : 'assets/images/bg.png', // Switch background image based on dark mode
+                      ),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+                // Foreground content container
+                Container(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      // History container
+                      Container(
+                        padding: const EdgeInsets.all(8.0),
+                        decoration: BoxDecoration(
+                          color: isDarkMode
+                              ? Colors.black38
+                              : Colors.green[800], // Set color based on dark mode
+                          borderRadius: BorderRadius.circular(16.0),
+                        ),
+                        child: Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween, // Pushes elements to opposite ends
+                                children: [
+                                  Padding(
+                                    padding:  EdgeInsets.only(left: 10.0),
+                                    child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.history,
+                                        color: isDarkMode ? Colors.white : Colors.white, // Black for dark mode, white for light mode
+                                        size: 30,
+                                      ),
+                                      SizedBox(width: 10.0),
+                                      Text(
+                                        'HISTORY',
+                                        style: TextStyle(
+                                          color: isDarkMode ? Colors.white : Colors.white, // White for dark mode, black for light mode
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                    ),
+                                  ),
 
-    final results = await Future.wait([loginQuery, logoutQuery, cashInQuery]);
+                                  // Filter button
+                              Padding(
+                                padding: const EdgeInsets.only(right: 10.0),
+                                  child: PopupMenuButton<String>(
+                                    icon: Icon(
+                                      Icons.filter_list,
+                                      color: isDarkMode ? Colors.white : Colors.white, // Set color based on dark mode
+                                    ),
+                                    onSelected: (value) {
+                                      setState(() {
+                                        _selectedFilter = value;
+                                      });
+                                    },
+                                    color: isDarkMode ? Colors.black87 : Colors.green.shade800,
+                                    itemBuilder: (BuildContext context) {
+                                      return ['Cashin', 'All', 'Login', 'Logout']
+                                          .map((String choice) {
+                                        return PopupMenuItem<String>(
+                                          value: choice,
+                                          child: Text(
+                                            choice,
+                                            style: TextStyle(color: Colors.white), // Set text color
+                                          ),
+                                        );
+                                      }).toList();
+                                    },
+                                  ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10.0),
+                            // Logs list container
+                            SizedBox(
+                              height: MediaQuery.of(context).size.height * 0.6, // Set height as a fraction of the screen height
+                              child: FutureBuilder<List<QueryDocumentSnapshot>>(
+                                future: _getCombinedLogs(userID), // Pass the userID
+                                builder: (context, snapshot) {
+                                  if (snapshot.connectionState == ConnectionState.waiting) {
+                                    return const Center(child: CircularProgressIndicator());
+                                  }
+                                  if (snapshot.hasError) {
+                                    return Center(
+                                      child: Text('Error: ${snapshot.error}'),
+                                    );
+                                  }
 
-    final allLogs = [
-      ...results[0].docs,
-      ...results[1].docs,
-      ...results[2].docs
-    ];
-    allLogs.sort((a, b) =>
-        (b['scannedTime'] as Timestamp).compareTo(
-            a['scannedTime'] as Timestamp));
-
-    return allLogs;
+                                  final logs = snapshot.data ?? [];
+                                  if (logs.isEmpty && _selectedFilter == 'All') {
+                                    return const Center(child: Text('No logs available.'));
+                                  }
+                                  return _buildLogContainer(logs);
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
   }
 
   Widget _buildLogContainer(List<QueryDocumentSnapshot> logs) {
@@ -109,54 +266,64 @@ class _HistoryPageState extends State<HistoryPage> {
         }
 
         filteredLogs.add(
-            Container(
-              margin: const EdgeInsets.symmetric(vertical: 4.0),
-              height: isCashInLog ? 120.0 : 100.0,
-              decoration: BoxDecoration(
-                color: isLogin ? Colors.green : isLogout ? Colors.red : Colors
-                    .blueAccent,
-                borderRadius: BorderRadius.circular(8.0),
-              ),
-              child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
-                title: Text(title, style: const TextStyle(color: Colors.white)),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(description,
-                        style: const TextStyle(color: Colors.white70)),
-                    if (isCashInLog || isLogin)
-                      Expanded(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          // Align to the right
-                          children: [
-                            Align(
-                              alignment: Alignment.topRight,
-                              // Vertically center the amount
-                              child: Padding(
-                                padding: const EdgeInsets.only(bottom: 10.0),
-                                // Add some padding on the right side
-                                child: Text(
-                                  isCashInLog
-                                      ? "+ ₱ ${data['amount']?.toStringAsFixed(
-                                      2) ?? '0.00'}" // Amount for Cash-in
-                                      : "- ₱ 30.00", // Fixed amount for Log-in
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 20.0, // Make the text bigger
-                                  ),
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 4.0),
+            height: isCashInLog ? 120.0 : 100.0,
+            decoration: BoxDecoration(
+              color: isLogin ? Colors.green : isLogout ? Colors.red : Colors
+                  .blueAccent,
+              borderRadius: BorderRadius.circular(8.0),
+            ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
+              title: Text(title, style: const TextStyle(color: Colors.white)),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(description,
+                      style: const TextStyle(color: Colors.white70)),
+                  if (isCashInLog || isLogin)
+                    Expanded(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Align(
+                            alignment: Alignment.topRight,
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 10.0),
+                              child: Text(
+                                isCashInLog
+                                    ? "+ ₱ ${data['amount']?.toStringAsFixed(
+                                    2) ?? '0.00'}"
+                                    : "- ₱ 30.00",
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 20.0,
                                 ),
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
-            ));
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        HistoryDescPage(
+                          logData: data,
+                          transactionId: log.id, // Pass the document ID
+                        ),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
       }
     }
 
@@ -165,119 +332,6 @@ class _HistoryPageState extends State<HistoryPage> {
       children: filteredLogs.isNotEmpty
           ? filteredLogs
           : [const Center(child: Text('No logs matching the filter.'))],
-    );
-  }
-
-
-  @override
-  Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
-        return false; // Prevents navigating back.
-      },
-      child: Scaffold(
-        body: Stack(
-          children: [
-            // Background container with the image
-            Container(
-              decoration: BoxDecoration(
-                image: DecorationImage(
-                  image: AssetImage('assets/images/bg.png'),
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-            // Foreground content
-            FutureBuilder<String?>(
-              future: _getUserID(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: Text(
-                      'User not authenticated or userID not found.'));
-                }
-
-                final userID = snapshot.data;
-
-                return Container(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8.0),
-                        decoration: BoxDecoration(
-                          color: Colors.green[800],
-                          borderRadius: BorderRadius.circular(16.0),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: const [
-                                Icon(Icons.history, color: Colors.green),
-                                SizedBox(width: 8.0),
-                                Text(
-                                  'HISTORY',
-                                  style: TextStyle(
-                                      color: Colors.green, fontSize: 18),
-                                ),
-                              ],
-                            ),
-                            PopupMenuButton<String>(
-                              icon: const Icon(
-                                  Icons.filter_list, color: Colors.green),
-                              onSelected: (value) {
-                                setState(() {
-                                  _selectedFilter = value;
-                                });
-                              },
-                              itemBuilder: (BuildContext context) {
-                                return ['All', 'Login', 'Logout', 'Cashin']
-                                    .map((String choice) {
-                                  return PopupMenuItem<String>(
-                                    value: choice,
-                                    child: Text(choice),
-                                  );
-                                }).toList();
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 10.0),
-                      // Adds space between header and logs.
-                      Expanded(
-                        child: FutureBuilder<List<QueryDocumentSnapshot>>(
-                          future: _getCombinedLogs(userID),
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState ==
-                                ConnectionState.waiting) {
-                              return const Center(
-                                  child: CircularProgressIndicator());
-                            }
-                            if (snapshot.hasError) {
-                              return Center(
-                                  child: Text('Error: ${snapshot.error}'));
-                            }
-                            final logs = snapshot.data ?? [];
-                            if (logs.isEmpty && _selectedFilter == 'All') {
-                              return const Center(
-                                  child: Text('No logs available.'));
-                            }
-                            return _buildLogContainer(logs);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

@@ -10,10 +10,19 @@ import 'home_page_admin.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:provider/provider.dart';  // Add this import
+import 'theme_provider.dart';  // Import your ThemeProvider file
+import 'package:flutter/services.dart'; // Add this import
 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Lock the app to portrait mode
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,   // Normal portrait
+  ]);
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
@@ -25,36 +34,26 @@ class MyAppMain extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-        theme: ThemeData(
-          primarySwatch: Colors.green,
-          inputDecorationTheme: InputDecorationTheme(
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8.0),
-              borderSide: BorderSide(color: Colors.grey), // Default border color
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8.0),
-              borderSide: BorderSide(color: Colors.green), // Border color when focused
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8.0),
-              borderSide: BorderSide(color: Colors.grey), // Border color when not focused
-            ),
-            floatingLabelStyle: TextStyle(
-              color: Colors.green, // Label color when focused
-            ),
-          ),
-        ),
-      home: OpeningPage(),
-      routes: {
-        '/login': (context) => LoginPage(), // Define route for login
-        '/register': (context) => RegisterPage(), // Define route for register
-        '/guest': (context) => GuestPage(), // Define route for guest
-      },
+    return ChangeNotifierProvider<ThemeProvider>(
+      create: (context) => ThemeProvider(),
+      child: Builder(
+        builder: (context) {
+          return MaterialApp(
+            theme: Provider.of<ThemeProvider>(context).themeData,
+            home: OpeningPage(),
+            routes: {
+              '/login': (context) => LoginPage(),
+              '/register': (context) => RegisterPage(),
+              '/guest': (context) => GuestPage(),
+            },
+          );
+        },
+      ),
     );
   }
 }
+
+
 
 class OpeningPage extends StatefulWidget {
   @override
@@ -62,17 +61,39 @@ class OpeningPage extends StatefulWidget {
 }
 
 class _SplashPageState extends State<OpeningPage> {
-  bool _rememberMe = false; // Track whether the user selects "Remember Me"
+  bool rememberMe = false; // Track whether the user selects "Remember Me"
   final FlutterSecureStorage storage = FlutterSecureStorage();
+  bool _isLoggedOut = false;  // Flag to track logout status
 
   @override
   void initState() {
     super.initState();
     _checkRememberMe();
+    _showLoggedInSnackbar();
+  }
+
+  Future<void> _showLoggedInSnackbar() async {
+    // Only show the snackbar if the user is not logged out
+    if (_isLoggedOut) {
+      return;  // Skip showing snackbar if logged out
+    }
+
+    String? rememberMeValue = await storage.read(key: 'isRemembered');
+    if (rememberMeValue == 'false') {
+      // Show Snackbar with session expired message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Your login session has expired!"),
+          behavior: SnackBarBehavior.floating, // Floating snackbar
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   Future<void> _checkRememberMe() async {
     String? value = await storage.read(key: 'isRemembered');
+
     if (value == 'true') {
       // Proceed to check if the user is logged in or auto-login logic
       User? user = FirebaseAuth.instance.currentUser;
@@ -90,15 +111,23 @@ class _SplashPageState extends State<OpeningPage> {
         } else {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => MyHomePage(title:'Home')),
+            MaterialPageRoute(builder: (context) => MyHomePage(title: 'Home')),
           );
         }
       }
+    } else {
+      // If rememberMe is false, sign the user out and show the snackbar
+      await FirebaseAuth.instance.signOut();
+      setState(() {
+        _isLoggedOut = true;  // Set the flag to true after logout
+      });
+      _showLoggedInSnackbar();  // Correct method call here
     }
   }
 
   final PageController _controller = PageController();
   int _currentPage = 0;
+
 
   @override
   Widget build(BuildContext context) {
@@ -133,7 +162,7 @@ class _SplashPageState extends State<OpeningPage> {
             top: 40,
             left: 20,
             child: Image.asset(
-              'assets/images/FitTrack_Icon.png', // Replace with your asset path
+              'assets/images/FitTrack_Icon.png',
               width: 170,
               height: 170,
             ),

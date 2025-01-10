@@ -213,6 +213,7 @@ class _RegisterPageState extends State<RegisterPage> {
         'phone': _phoneController.text,
         'userID': _userIDController.text,
         'profileIconIndex': 0,
+        'profileImage': '',
         'wallet': 0,
         'userStatus': 'On Approval',
         'lastLogin': 'N/A',
@@ -316,7 +317,9 @@ class _RegisterPageState extends State<RegisterPage> {
                             controller: _firstNameController,
                             decoration: const InputDecoration(
                               labelText: 'Enter first name',
-                              border: OutlineInputBorder(),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.all(Radius.circular(30)),
+                              ),
                             ),
                             validator: (value) {
                               if (value == null || value.isEmpty) {
@@ -332,7 +335,9 @@ class _RegisterPageState extends State<RegisterPage> {
                             controller: _lastNameController,
                             decoration: const InputDecoration(
                               labelText: 'Enter last name',
-                              border: OutlineInputBorder(),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.all(Radius.circular(30)),
+                              ),
                             ),
                             validator: (value) {
                               if (value == null || value.isEmpty) {
@@ -356,7 +361,9 @@ class _RegisterPageState extends State<RegisterPage> {
                                 controller: _birthdayController,
                                 decoration: const InputDecoration(
                                   labelText: 'Birthday',
-                                  border: OutlineInputBorder(),
+                                  border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.all(Radius.circular(30)),
+                                  ),
                                   suffixIcon: Icon(Icons.calendar_today),
                                 ),
                                 validator: (value) {
@@ -375,7 +382,9 @@ class _RegisterPageState extends State<RegisterPage> {
                             controller: _ageController,
                             decoration: const InputDecoration(
                               labelText: 'Age',
-                              border: OutlineInputBorder(),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.all(Radius.circular(30)),
+                              ),
                             ),
                             keyboardType: TextInputType.number,
                             inputFormatters: <TextInputFormatter>[
@@ -397,7 +406,9 @@ class _RegisterPageState extends State<RegisterPage> {
                       controller: _userIDController,
                       decoration: const InputDecoration(
                         labelText: 'Faculty or Student ID',
-                        border: OutlineInputBorder(),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(30)),
+                        ),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
@@ -411,7 +422,9 @@ class _RegisterPageState extends State<RegisterPage> {
                       controller: _phoneController,
                       decoration: const InputDecoration(
                         labelText: 'Phone Number',
-                        border: OutlineInputBorder(),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(30)),
+                        ),
                       ),
                       keyboardType: TextInputType.phone,
                       inputFormatters: <TextInputFormatter>[
@@ -442,7 +455,9 @@ class _RegisterPageState extends State<RegisterPage> {
                       }).toList(),
                       decoration: const InputDecoration(
                         labelText: 'User Type',
-                        border: OutlineInputBorder(),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(30)),
+                        ),
                       ),
                       validator: (value) {
                         if (value == null) {
@@ -471,7 +486,9 @@ class _RegisterPageState extends State<RegisterPage> {
                       controller: _emailController,
                       decoration: const InputDecoration(
                         labelText: 'Email',
-                        border: OutlineInputBorder(),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(30)),
+                        ),
                       ),
                       keyboardType: TextInputType.emailAddress,
                       validator: (value) {
@@ -487,7 +504,9 @@ class _RegisterPageState extends State<RegisterPage> {
                       obscureText: !_isPasswordVisible,
                       decoration: InputDecoration(
                         labelText: 'Password',
-                        border: const OutlineInputBorder(),
+                        border: const OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(30)),
+                        ),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
@@ -512,7 +531,9 @@ class _RegisterPageState extends State<RegisterPage> {
                       obscureText: !_isConfirmPasswordVisible,
                       decoration: InputDecoration(
                         labelText: 'Confirm Password',
-                        border: const OutlineInputBorder(),
+                        border: const OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(30)),
+                        ),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _isConfirmPasswordVisible ? Icons.visibility : Icons.visibility_off,
