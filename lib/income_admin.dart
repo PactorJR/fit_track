@@ -48,17 +48,15 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
   }
 
   Future<DateTime?> _selectDate(BuildContext context, {DateTime? initialDate}) async {
-    // If no date is provided, set initialDate to today's date
     DateTime initial = initialDate ?? DateTime.now();
 
     return await showDatePicker(
       context: context,
-      initialDate: initial, // Use provided initialDate or default to today
+      initialDate: initial,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
   }
-
 
   String formatTimestamp(Timestamp timestamp) {
     DateTime dateTime = timestamp.toDate();
@@ -68,32 +66,27 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
   bool filterByDay(Timestamp scannedTime) {
     DateTime logDate = scannedTime.toDate();
 
-    // Check if a specific day of the week is selected
     if (selectedDay != null && selectedDay != 'All') {
-      String logDay = DateFormat('EEEE').format(logDate); // Get full day name
+      String logDay = DateFormat('EEEE').format(logDate);
       if (logDay != selectedDay) {
-        return false; // Exclude logs that don't match the selected day
+        return false;
       }
     }
 
-    // Check if the startDate is chosen but the endDate is not selected
     if (startDate != null && endDate == null) {
       print("Waiting for End date to be chosen...");
       return false;
     }
 
-    // Filter by date range: Only show logs within the range
     if (startDate != null && endDate != null) {
       bool withinRange = !logDate.isBefore(startDate!) && !logDate.isAfter(endDate!);
       if (!withinRange) {
-        return false; // Exclude logs outside the date range
+        return false;
       }
     }
 
-    return true; // Include logs that meet all criteria
+    return true;
   }
-
-
 
   @override
   Future<String> generateIncomeReport(List<DocumentSnapshot> filteredDocs) async {
@@ -116,18 +109,34 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
 
     for (var doc in filteredDocs) {
       String adminName = doc['adminName'] ?? 'Unknown Admin';
-      String userName = doc['userName'] ?? 'Unknown User';
-      double amount = doc['amount']?.toDouble() ?? 0.0;
-      String scannedTime = doc['scannedTime'] != null && doc['scannedTime'] is Timestamp
-          ? DateFormat('yyyy-MM-dd HH:mm:ss').format((doc['scannedTime'] as Timestamp).toDate())
-          : 'N/A';
+      String userName = 'Unknown User';
+      double amount = 0.0;
+      String scannedTime = 'N/A';
+
+      if (doc.reference.path.contains('guests')) {
+        String firstName = doc['firstName'] ?? '';
+        String lastName = doc['lastName'] ?? '';
+        userName = '$firstName $lastName'.trim();
+        amount = doc['amountPaid']?.toDouble() ?? 0.0;
+
+        if (doc['timeStamp'] != null && doc['timeStamp'] is Timestamp) {
+          scannedTime = DateFormat('yyyy-MM-dd HH:mm:ss').format((doc['timeStamp'] as Timestamp).toDate());
+        }
+      } else {
+        userName = doc['userName'] ?? 'Unknown User';
+        amount = doc['amount']?.toDouble() ?? 0.0;
+
+        if (doc['scannedTime'] != null && doc['scannedTime'] is Timestamp) {
+          scannedTime = DateFormat('yyyy-MM-dd HH:mm:ss').format((doc['scannedTime'] as Timestamp).toDate());
+        }
+      }
 
       totalIncome += amount;
 
-      reportContent += '$adminName, $userName, \$${amount.toStringAsFixed(2)}, $scannedTime\n';
+      reportContent += '$adminName, $userName, \₱${amount.toStringAsFixed(2)}, $scannedTime\n';
     }
 
-    reportContent += '\nTotal Income: \$${totalIncome.toStringAsFixed(2)}\n';
+    reportContent += '\nTotal Income: \₱${totalIncome.toStringAsFixed(2)}\n';
 
     File file = File(filePath);
     await file.writeAsString(reportContent);
@@ -143,27 +152,25 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
     }
   }
 
+
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     bool isDarkMode = themeProvider.isDarkMode;
     return Scaffold(
       body: Stack(
         children: [
-          // Background image
           Container(
             decoration: BoxDecoration(
               image: DecorationImage(
-                // Switch between background images based on the dark mode
                 image: AssetImage(
                   themeProvider.isDarkMode
-                      ? 'assets/images/dark_bg.png' // Dark mode background
-                      : 'assets/images/bg.png',    // Light mode background
+                      ? 'assets/images/dark_bg.png'
+                      : 'assets/images/bg.png',
                 ),
                 fit: BoxFit.cover,
               ),
             ),
           ),
-          // Title at the top
           Positioned(
             top: 60,
             left: 0,
@@ -185,13 +192,11 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
                       fontWeight: FontWeight.bold,
                       fontSize: 24,
                     ),
-                    ),
+                  ),
                 ],
               ),
             ),
           ),
-
-          // Centered content
           Center(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -201,9 +206,14 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
+                      height: 600,
                       decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.8),
+                        color: isDarkMode ? Colors.black38 : Colors.white,
                         borderRadius: BorderRadius.circular(16.0),
+                        border: Border.all(
+                          color: Colors.black,
+                          width: 2.0,
+                        ),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(8.0),
@@ -215,24 +225,25 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
                               style: TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                                color: isDarkMode ? Colors.white : Colors.black,
                               ),
                               textAlign: TextAlign.center,
                             ),
                             SizedBox(height: 8),
-
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                // Dropdown for Day Selection
                                 Row(
                                   children: [
-                                    Icon(Icons.filter_list, color: Colors.white), // Filter icon
+                                    Icon(
+                                      Icons.filter_list,
+                                      color: isDarkMode ? Colors.white : Colors.black,
+                                    ),
                                     SizedBox(width: 8),
                                     DropdownButton<String>(
                                       value: selectedDay,
-                                      hint: Text('Select Day', style: TextStyle(color: Colors.white)),
-                                      icon: Icon(Icons.arrow_drop_down, color: Colors.white),
+                                      hint: Text('Select Day', style: TextStyle(color: isDarkMode ? Colors.white : Colors.black)),
+                                      icon: Icon(Icons.arrow_drop_down, color: isDarkMode ? Colors.white : Colors.black),
                                       onChanged: (String? newValue) {
                                         setState(() {
                                           selectedDay = newValue;
@@ -244,15 +255,13 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
                                       ].map<DropdownMenuItem<String>>((String value) {
                                         return DropdownMenuItem<String>(
                                           value: value,
-                                          child: Text(value, style: TextStyle(color: Colors.black)),
+                                          child: Text(value, style: TextStyle(color: isDarkMode ? Colors.white : Colors.black)),
                                         );
                                       }).toList(),
                                     ),
                                   ],
                                 ),
                                 SizedBox(width: 20),
-
-                                // Start Date Picker
                                 GestureDetector(
                                   onTap: () async {
                                     DateTime? pickedDate = await _selectDate(context, initialDate: startDate);
@@ -264,18 +273,16 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
                                   },
                                   child: Row(
                                     children: [
-                                      Icon(Icons.calendar_today, color: Colors.white),
+                                      Icon(Icons.calendar_today, color: isDarkMode ? Colors.white : Colors.black),
                                       SizedBox(width: 8),
                                       Text(
                                         startDate == null ? 'Start' : DateFormat('MM-dd').format(startDate!),
-                                        style: TextStyle(color: Colors.white, fontSize: 16),
+                                        style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontSize: 16),
                                       ),
                                     ],
                                   ),
                                 ),
                                 SizedBox(width: 20),
-
-                                // End Date Picker
                                 GestureDetector(
                                   onTap: () async {
                                     DateTime? pickedDate = await _selectDate(context, initialDate: endDate);
@@ -287,11 +294,11 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
                                   },
                                   child: Row(
                                     children: [
-                                      Icon(Icons.calendar_today, color: Colors.white),
+                                      Icon(Icons.calendar_today, color: isDarkMode ? Colors.white : Colors.black),
                                       SizedBox(width: 8),
                                       Text(
                                         endDate == null ? 'End' : DateFormat('MM-dd').format(endDate!),
-                                        style: TextStyle(color: Colors.white, fontSize: 16),
+                                        style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontSize: 16),
                                       ),
                                     ],
                                   ),
@@ -300,167 +307,153 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
                               ],
                             ),
                             SizedBox(height: 8),
-
-                            SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: StreamBuilder<QuerySnapshot>(
-                                stream: FirebaseFirestore.instance.collection('cashinlogs').snapshots(),
-                                builder: (context, snapshot) {
-                                  if (snapshot.connectionState == ConnectionState.waiting) {
-                                    return Center(child: CircularProgressIndicator());
-                                  }
-                                  if (snapshot.hasError) {
-                                    return Center(child: Text('Error: ${snapshot.error}'));
-                                  }
-                                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                                    return Center(child: Text('No income found.'));
-                                  }
-
-                                  // Filter the documents based on the selected day and date range
-                                  List<DocumentSnapshot> localFilteredDocs = snapshot.data!.docs.where((doc) {
-                                    if (doc['scannedTime'] == null || !(doc['scannedTime'] is Timestamp)) {
-                                      return false; // Exclude documents without valid timestamps
-                                    }
-
-                                    // Convert Timestamp to DateTime
-                                    DateTime logDate = (doc['scannedTime'] as Timestamp).toDate();
-
-                                    // Apply date range filter
-                                    if (startDate != null && endDate != null) {
-                                      if (logDate.isBefore(startDate!) || logDate.isAfter(endDate!)) {
-                                        return false; // Exclude logs outside the range
+                            Expanded(
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.vertical,
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: StreamBuilder<QuerySnapshot>(
+                                    stream: FirebaseFirestore.instance.collection('cashinlogs').snapshots(),
+                                    builder: (context, snapshot) {
+                                      if (snapshot.connectionState == ConnectionState.waiting) {
+                                        return Center(child: CircularProgressIndicator());
                                       }
-                                    }
-
-                                    // Apply day filter
-                                    if (selectedDay != null && selectedDay != 'All') {
-                                      String dayOfWeek = DateFormat('EEEE').format(logDate); // Get the day of the week
-                                      if (dayOfWeek != selectedDay) {
-                                        return false; // Exclude logs that don't match the selected day
+                                      if (snapshot.hasError) {
+                                        return Center(child: Text('Error: ${snapshot.error}'));
                                       }
-                                    }
 
-                                    return true; // Include logs that pass all filters
-                                  }).toList();
+                                      return StreamBuilder<QuerySnapshot>(
+                                        stream: FirebaseFirestore.instance.collection('guests').snapshots(),
+                                        builder: (context, guestsSnapshot) {
+                                          if (guestsSnapshot.connectionState == ConnectionState.waiting) {
+                                            return Center(child: CircularProgressIndicator());
+                                          }
+                                          if (guestsSnapshot.hasError) {
+                                            return Center(child: Text('Error: ${guestsSnapshot.error}'));
+                                          }
+                                          if (!guestsSnapshot.hasData || guestsSnapshot.data!.docs.isEmpty && !snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                                            return Center(child: Text('No Income data found.'));
+                                          }
 
-                                  // Update the filteredDocs
-                                  filteredDocs = localFilteredDocs;
+                                          List<DocumentSnapshot> combinedDocs = [];
+                                          List<DocumentSnapshot> filteredCashinLogs = snapshot.data!.docs.where((doc) {
+                                            if (doc['scannedTime'] == null || !(doc['scannedTime'] is Timestamp)) {
+                                              return false;
+                                            }
 
-                                  if (startDate != null && endDate == null) {
-                                    return Center(
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          SizedBox(height: 10),
-                                          Text(
-                                            'Waiting for End date to be chosen...',
-                                            style: TextStyle(color: Colors.orange, fontSize: 16),
-                                          ),
-                                          CircularProgressIndicator(),
-                                        ],
-                                      ),
-                                    );
-                                  }
+                                            DateTime logDate = (doc['scannedTime'] as Timestamp).toDate();
 
-                                  if (filteredDocs.isEmpty) {
-                                    return Center(
-                                      child: Text(
-                                        'No income info found for the selected filter',
-                                        style: TextStyle(color: Colors.red, fontSize: 16),
-                                      ),
-                                    );
-                                  }
+                                            if (startDate != null && endDate != null) {
+                                              if (logDate.isBefore(startDate!) || logDate.isAfter(endDate!)) {
+                                                return false;
+                                              }
+                                            }
 
-                                  return Table(
-                                    border: TableBorder.all(),
-                                    columnWidths: {
-                                      0: FixedColumnWidth(120), // Adjusted width for Admin Name
-                                      1: FixedColumnWidth(120), // Adjusted width for User Name
-                                      2: FixedColumnWidth(80),  // Adjusted width for Amount
-                                      3: FixedColumnWidth(100), // Adjusted width for Date
+                                            if (selectedDay != null && selectedDay != 'All') {
+                                              String dayOfWeek = DateFormat('EEEE').format(logDate);
+                                              if (dayOfWeek != selectedDay) {
+                                                return false;
+                                              }
+                                            }
+
+                                            return true;
+                                          }).toList();
+
+                                          List<DocumentSnapshot> filteredGuests = guestsSnapshot.data!.docs;
+                                          combinedDocs.addAll(filteredCashinLogs);
+                                          combinedDocs.addAll(filteredGuests);
+
+                                          filteredDocs = combinedDocs;
+
+                                          if (combinedDocs.isEmpty) {
+                                            return Center(
+                                              child: Text('No data found for the selected filters', style: TextStyle(color: Colors.red, fontSize: 16)),
+                                            );
+                                          }
+
+                                          return Table(
+                                            border: TableBorder.all(),
+                                            columnWidths: {
+                                              0: FixedColumnWidth(120),
+                                              1: FixedColumnWidth(120),
+                                              2: FixedColumnWidth(80),
+                                              3: FixedColumnWidth(100),
+                                            },
+                                            children: [
+                                              TableRow(
+                                                children: [
+                                                  Container(height: 40, alignment: Alignment.center, child: Text('Admin Name', style: TextStyle(fontWeight: FontWeight.bold))),
+                                                  Container(height: 40, alignment: Alignment.center, child: Text('User/Guest Name', style: TextStyle(fontWeight: FontWeight.bold))),
+                                                  Container(height: 40, alignment: Alignment.center, child: Text('Amount', style: TextStyle(fontWeight: FontWeight.bold))),
+                                                  Container(height: 40, alignment: Alignment.center, child: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
+                                                ],
+                                              ),
+                                              ...combinedDocs.map((doc) {
+                                                var data = doc.data() as Map<String, dynamic>;
+
+                                                return TableRow(
+                                                  decoration: BoxDecoration(
+                                                    color: selectedUserId == doc.id ? Colors.white.withOpacity(0.8) : Colors.transparent,
+                                                  ),
+                                                  children: [
+                                                    GestureDetector(
+                                                      onTap: () {
+                                                        _selectUser(doc.id);
+                                                        FirebaseFirestore.instance.collection('cashinlogs').doc(doc.id).update({'seen': true});
+                                                      },
+                                                      child: Container(height: 40, alignment: Alignment.center, child: Text(data['adminName'] ?? 'N/A')),
+                                                    ),
+                                                    GestureDetector(
+                                                      onTap: () {
+                                                        _selectUser(doc.id);
+                                                      },
+                                                      child: Container(
+                                                        height: 40,
+                                                        alignment: Alignment.center,
+                                                        child: Text(
+                                                          data['userName'] ?? '${data['firstName']} ${data['lastName']}' ?? 'N/A',
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    GestureDetector(
+                                                      onTap: () {
+                                                        _selectUser(doc.id);
+                                                      },
+                                                      child: Container(
+                                                        height: 40,
+                                                        alignment: Alignment.center,
+                                                        child: Text(
+                                                          data.containsKey('amount')
+                                                              ? '\$${data['amount']}'
+                                                              : (data.containsKey('amountPaid') ? '\$${data['amountPaid']}' : 'Not available'),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    GestureDetector(
+                                                      onTap: () {
+                                                        _selectUser(doc.id);
+                                                      },
+                                                      child: Container(
+                                                        height: 40,
+                                                        alignment: Alignment.center,
+                                                        child: Text(
+                                                          data.containsKey('scannedTime') && data['scannedTime'] != null
+                                                              ? DateFormat('MM-dd-yyyy').format(
+                                                              (data['scannedTime'] as Timestamp).toDate())
+                                                              : 'Not available',
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                );
+                                              }).toList(),
+                                            ],
+                                          );
+                                        },
+                                      );
                                     },
-                                    children: [
-                                      TableRow(
-                                        children: [
-                                          Container(
-                                            height: 40,
-                                            alignment: Alignment.center,
-                                            child: Text('Admin Name', style: TextStyle(fontWeight: FontWeight.bold)),
-                                          ),
-                                          Container(
-                                            height: 40,
-                                            alignment: Alignment.center,
-                                            child: Text('User Name', style: TextStyle(fontWeight: FontWeight.bold)),
-                                          ),
-                                          Container(
-                                            height: 40,
-                                            alignment: Alignment.center,
-                                            child: Text('Amount', style: TextStyle(fontWeight: FontWeight.bold)),
-                                          ),
-                                          Container(
-                                            height: 40,
-                                            alignment: Alignment.center,
-                                            child: Text('Date', style: TextStyle(fontWeight: FontWeight.bold)),
-                                          ),
-                                        ],
-                                      ),
-                                      ...filteredDocs.map((doc) {
-                                        return TableRow(
-                                          decoration: BoxDecoration(
-                                            color: selectedUserId == doc.id ? Colors.white.withOpacity(0.8) : Colors.transparent,
-                                          ),
-                                          children: [
-                                            GestureDetector(
-                                              onTap: () {
-                                                _selectUser(doc.id);
-                                                FirebaseFirestore.instance.collection('cashinlogs').doc(doc.id).update({'seen': true});
-                                              },
-                                              child: Container(
-                                                height: 40,
-                                                alignment: Alignment.center,
-                                                child: Text(doc['adminName'] ?? 'N/A'),
-                                              ),
-                                            ),
-                                            GestureDetector(
-                                              onTap: () {
-                                                _selectUser(doc.id);
-                                              },
-                                              child: Container(
-                                                height: 40,
-                                                alignment: Alignment.center,
-                                                child: Text(doc['userName'] ?? 'N/A'),
-                                              ),
-                                            ),
-                                            GestureDetector(
-                                              onTap: () {
-                                                _selectUser(doc.id);
-                                              },
-                                              child: Container(
-                                                height: 40,
-                                                alignment: Alignment.center,
-                                                child: Text('${doc['amount'] ?? 0}'),
-                                              ),
-                                            ),
-                                            GestureDetector(
-                                              onTap: () {
-                                                _selectUser(doc.id);
-                                              },
-                                              child: Container(
-                                                height: 40,
-                                                alignment: Alignment.center,
-                                                child: Text(
-                                                  doc['scannedTime'] != null && doc['scannedTime'] is Timestamp
-                                                      ? DateFormat('yyyy-MM-dd HH:mm:ss').format((doc['scannedTime'] as Timestamp).toDate())
-                                                      : '',
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        );
-                                      }).toList(),
-                                    ],
-                                  );
-                                },
+                                  ),
+                                ),
                               ),
                             ),
                             SizedBox(height: 16),
@@ -471,12 +464,12 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
                                 children: [
                                   ElevatedButton(
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.white, // Set button background to white
+                                      backgroundColor: Colors.white,
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16.0), // Rounded corners
+                                        borderRadius: BorderRadius.circular(16.0),
                                       ),
-                                      side: BorderSide(color: Colors.green), // Add a green border
-                                      elevation: 0, // Remove button shadow
+                                      side: BorderSide(color: Colors.green),
+                                      elevation: 0,
                                     ),
                               onPressed: () async {
                                 print("Button pressed. Checking filteredDocs...");
@@ -484,16 +477,16 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
                                 if (filteredDocs.isNotEmpty) {
                                   print("Filtered Docs is not empty. Proceeding to generate report...");
 
-                                  // Show a loading dialog while generating the report
+
                                   showDialog(
                                     context: context,
-                                    barrierDismissible: false, // Prevent dismissal
+                                    barrierDismissible: false,
                                     builder: (BuildContext context) {
                                       return AlertDialog(
                                         title: Text("Generating Report"),
                                         content: Row(
                                           children: [
-                                            CircularProgressIndicator(), // Show a loading spinner
+                                            CircularProgressIndicator(),
                                             SizedBox(width: 16),
                                             Expanded(child: Text("Please wait while the report is being generated...")),
                                           ],
@@ -502,13 +495,13 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
                                     },
                                   );
 
-                                  // Generate the report
+
                                   String filePath = await generateIncomeReport(filteredDocs);
 
-                                  // Close the loading dialog
+
                                   Navigator.of(context).pop();
 
-                                  // Show a success dialog with the file location
+
                                   showDialog(
                                     context: context,
                                     builder: (BuildContext context) {
@@ -529,7 +522,7 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
                                     } else {
                                       print("Filtered Docs is empty. Displaying No Data message...");
 
-                                      // Show an error dialog if there are no documents
+
                                       showDialog(
                                         context: context,
                                         builder: (BuildContext context) {
@@ -549,19 +542,19 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
                                       );
                                     }
 
-                                    // Additional debug print to track the filteredDocs length
+
                                     print("Filtered Docs length: ${filteredDocs.length}");
                                   },
 
 
                                       child: Row(
-                                      mainAxisSize: MainAxisSize.max, // Ensure the button adjusts to content size
+                                      mainAxisSize: MainAxisSize.max,
                                       children: [
-                                        Icon(Icons.edit_note_outlined, color: Colors.green), // Icon with green color
-                                        SizedBox(width: 8), // Space between the icon and text
+                                        Icon(Icons.edit_note_outlined, color: Colors.green),
+                                        SizedBox(width: 8),
                                         Text(
                                           'Generate a Report',
-                                          style: TextStyle(color: Colors.green), // Text color set to green
+                                          style: TextStyle(color: Colors.green),
                                         ),
                                       ],
                                     ),
@@ -579,14 +572,14 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
             ),
           ),
           Positioned(
-            top: 60, // Adjust this value to move the button down
-            left: 16, // Horizontal position
+            top: 60,
+            left: 16,
             child: FloatingActionButton(
-              mini: true, // Smaller back button
+              mini: true,
               backgroundColor: isDarkMode ? Colors.grey : Colors.green,
               onPressed: () {
                 Navigator.of(context)
-                    .pop(); // Navigate back to the previous screen
+                    .pop();
               },
               child: Icon(Icons.arrow_back, color: Colors.white),
             ),

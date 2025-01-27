@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:provider/provider.dart'; // Assuming you want to use the theme provider
+import 'package:provider/provider.dart';
 import 'theme_provider.dart';
-import 'dart:io'; // For file operations
-import 'package:http/http.dart' as http; // To download files
-import 'package:path_provider/path_provider.dart'; // To get app directory
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 
 void main() async {
@@ -36,7 +36,8 @@ class FilesAdminPage extends StatefulWidget {
 class _FilesAdminPageState extends State<FilesAdminPage> {
   final FirebaseStorage _storage = FirebaseStorage.instance;
   List<String> _filesAndFolders = [];
-  String _currentPath = ''; // To keep track of the current folder path
+  List<String> userIdToFolder = [];
+  String _currentPath = '';
   bool _loading = false;
 
   @override
@@ -45,86 +46,97 @@ class _FilesAdminPageState extends State<FilesAdminPage> {
     _listFilesAndPaths();
   }
 
-  Future<void> _downloadFile(String fileName) async {
+  bool _isLoading = true;
+  Future<void> _fetchAllData() async {
+    setState(() => _isLoading = true);
     try {
-      // Request permissions to manage external storage
-      await requestStoragePermission();
+      await Future.wait([
+        _listFilesAndPaths(),
+      ]);
+    } catch (e) {
+      print("Error fetching data: $e");
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
 
-      // Define the base path for FitTrack storage
-      const fitTrackPath = '/storage/emulated/0/FitTrack';
-      String specificPath;
+  Future<void> _onRefresh() async {
+    await _fetchAllData();
+  }
 
-      // Determine the specific folder based on the current path
-      if (_currentPath.contains('enrollment_certificates')) {
-        specificPath = '$fitTrackPath/Files/Certificates';
-      } else if (_currentPath.contains('userProfiles')) {
-        specificPath = '$fitTrackPath/Files/userProfiles';
+  Future<String> getUserName(String userId) async {
+    try {
+
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+
+      if (userDoc.exists) {
+        var data = userDoc.data() as Map<String, dynamic>;
+
+
+        String firstName = data['firstName'] ?? 'Unknown';
+        String lastName = data['lastName'] ?? 'User';
+        return '$firstName $lastName';
       } else {
-        throw Exception('Unknown path: $_currentPath');
-      }
-
-      // Create the FitTrack base directory if it doesn't exist
-      final fitTrackFolder = Directory(fitTrackPath);
-      if (!await fitTrackFolder.exists()) {
-        await fitTrackFolder.create(recursive: true);
-      }
-
-      // Create the specific directory if it doesn't exist
-      final specificFolder = Directory(specificPath);
-      if (!await specificFolder.exists()) {
-        await specificFolder.create(recursive: true);
-      }
-
-      // Define the file path inside the specific folder
-      final filePath = '$specificPath/$fileName';
-
-      // Create a reference to the file in Firebase Storage
-      final ref = _storage.ref('$_currentPath/$fileName');
-
-      // Generate a download URL for the file
-      final url = await ref.getDownloadURL();
-      print("Download URL for $fileName: $url");
-
-      // Download the file and save it locally
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        final file = File(filePath);
-        await file.writeAsBytes(response.bodyBytes);
-        print('File downloaded and saved to: $filePath');
-      } else {
-        throw Exception('Failed to download file. HTTP Status: ${response.statusCode}');
+        return 'Unknown User';
       }
     } catch (e) {
-      print("Error downloading file: $e");
+      print("Error fetching user details for userId $userId: $e");
+      return 'Unknown User';
     }
   }
 
-  Future<void> requestStoragePermission() async {
-    if (!await Permission.storage.request().isGranted) {
-      throw Exception('Storage permission denied');
-    }
-  }
 
-  Future<String> getFilePath(String fileName) async {
-    final directory = await getExternalStorageDirectory();
-    final path = directory?.path ?? '/storage/emulated/0'; // Fallback
-    return '$path/FitTrack/Files/Certificates/$fileName';
-  }
-
-  // List files and folders for a given path
   Future<void> _listFilesAndPaths([String path = '']) async {
     setState(() {
       _loading = true;
-      _currentPath = path; // Set the path, defaults to root if empty
+      _currentPath = path;
     });
 
     try {
       final ListResult result = await _storage.ref(_currentPath).listAll();
-      List<String> folders = result.prefixes.map((ref) => ref.fullPath + '/').toList(); // Add '/' to folders
-      List<String> files = result.items.map((ref) => ref.name).toList(); // File names only
+
+      List<String> folderDetails = [];
+      List<String> fileDetails = [];
+      List<String> folderUserId = [];
+
+
+      for (var folderRef in result.prefixes) {
+        if (_currentPath.startsWith('enrollment_certificates')) {
+          print('Processing folder path: ${folderRef.fullPath}');
+          String userId = folderRef.name;
+          String userName = await getUserName(userId);
+          folderDetails.add('$userName/');
+          folderUserId.add('$userId/');
+        } else {
+
+          if (folderRef.name == 'enrollment_certificates') {
+            folderDetails.add(folderRef.fullPath + '/');
+          }
+        }
+      }
+
+
+      for (var fileRef in result.items) {
+        print('Processing file path: ${fileRef.fullPath}');
+
+        if (_currentPath.startsWith('enrollment_certificates/')) {
+          List<String> parts = _currentPath.split('/');
+          if (parts.length < 2) {
+            print('Skipping file path (unexpected structure): ${fileRef.fullPath}');
+            continue;
+          }
+
+          String userId = parts[1];
+          String userName = await getUserName(userId);
+          fileDetails.add('$userName - ${fileRef.name}');
+        } else {
+          fileDetails.add(fileRef.name);
+        }
+      }
 
       setState(() {
-        _filesAndFolders = folders + files; // Combine folders and files
+        _filesAndFolders = folderDetails + fileDetails;
+        userIdToFolder = folderUserId;
         _loading = false;
       });
     } catch (e) {
@@ -137,16 +149,72 @@ class _FilesAdminPageState extends State<FilesAdminPage> {
 
 
   void _goToParentFolder() {
-    if (_currentPath.isNotEmpty) {
-      final parentPath = _currentPath.contains('/')
-          ? _currentPath.substring(0, _currentPath.lastIndexOf('/'))
-          : '';
-      _listFilesAndPaths(parentPath);
-    }
+    _listFilesAndPaths('');
   }
 
 
   @override
+
+  Future<void> _downloadFile(String fileName) async {
+    try {
+      await _requestPermissions();
+
+      String fitTrackPath = '/storage/emulated/0/FitTrack';
+      String certificatesPath = '$fitTrackPath/Files/Certificates';
+
+      final fitTrackFolder = Directory(fitTrackPath);
+      if (!await fitTrackFolder.exists()) {
+        await fitTrackFolder.create(recursive: true);
+      }
+
+      final certificatesFolder = Directory(certificatesPath);
+      if (!await certificatesFolder.exists()) {
+        await certificatesFolder.create(recursive: true);
+      }
+
+      String filePath = '$certificatesPath/$fileName';
+      final refPath = '$_currentPath/$fileName';
+      final ref = _storage.ref(refPath);
+
+      try {
+        final url = await ref.getDownloadURL();
+        final response = await http.get(Uri.parse(url));
+        if (response.statusCode == 200) {
+          final file = File(filePath);
+          await file.writeAsBytes(response.bodyBytes);
+          print('File downloaded and saved to: $filePath');
+        } else {
+          throw Exception('Failed to download file. HTTP Status: ${response.statusCode}');
+        }
+      } on FirebaseException catch (e) {
+        if (e.code == 'object-not-found') {
+          throw Exception('File does not exist at: $refPath');
+        } else {
+          rethrow;
+        }
+      }
+    } catch (e) {
+      print("Error downloading file: $e");
+    }
+  }
+
+  Future<void> _requestPermissions() async {
+    if (await Permission.manageExternalStorage.request().isGranted) {
+      print("Storage permission granted");
+    } else {
+      print("Storage permission denied");
+      throw Exception('Storage permission denied');
+    }
+  }
+
+
+
+  Future<String> getFilePath(String fileName) async {
+    final directory = await getExternalStorageDirectory();
+    final path = directory?.path ?? '/storage/emulated/0';
+    return '$path/FitTrack/Files/Certificates/$fileName';
+  }
+
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     bool isDarkMode = themeProvider.isDarkMode;
@@ -154,7 +222,7 @@ class _FilesAdminPageState extends State<FilesAdminPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // Background image
+
           Container(
             decoration: BoxDecoration(
               image: DecorationImage(
@@ -168,9 +236,9 @@ class _FilesAdminPageState extends State<FilesAdminPage> {
             ),
           ),
 
-          // Header content positioned at the top
+
           Positioned(
-            top: 60, // Adjust the top value as needed
+            top: 60,
             left: 0,
             right: 0,
             child: Center(
@@ -196,120 +264,160 @@ class _FilesAdminPageState extends State<FilesAdminPage> {
             ),
           ),
 
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
+          Padding(
+            padding: const EdgeInsets.only(top: 100.0),
+            child: RefreshIndicator(
+              onRefresh: _onRefresh,
               child: SingleChildScrollView(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: 600), // Limit the maximum width
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min, // Minimize space taken by the column
-                    children: [
-                      // If not in root, show a back button to navigate to the parent folder
-                      if (_currentPath.isNotEmpty)
-                        IconButton(
-                          icon: Icon(Icons.arrow_back, color: isDarkMode ? Colors.white : Colors.black),
-                          onPressed: _goToParentFolder,
-                        ),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: isDarkMode ? Colors.black38 : Colors.green.withOpacity(0.8),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min, // Adjust space usage
-                            children: [
-                              // Title Section
-                              Text(
-                                'Admin Files', // Title for the section
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: isDarkMode ? Colors.white : Colors.white,
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: SingleChildScrollView(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: 600),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                color: isDarkMode ? Colors.black38 : Colors.white,
+                                borderRadius: BorderRadius.circular(16.0),
+                                border: Border.all(
+                                  color: Colors.black,
+                                  width: 2.0,
                                 ),
                               ),
+                              child: Stack(
+                                children: [
 
-                              // Path Indicator
-                              if (_currentPath.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 8.0),
-                                  child: Text(
-                                    _currentPath, // Show current path
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.white70, // Slightly lighter text color for contrast
+                                  Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+
+                                        Text(
+                                          'Admin Files',
+                                          style: TextStyle(
+                                            fontSize: 24,
+                                            fontWeight: FontWeight.bold,
+                                            color: isDarkMode ? Colors.white : Colors.black,
+                                          ),
+                                        ),
+
+
+                                        if (_currentPath.isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 8.0),
+                                            child: Text(
+                                              _currentPath,
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.black,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+
+                                        SizedBox(height: 0),
+
+
+                                        Center(
+                                          child: ListView.builder(
+                                            shrinkWrap: true,
+                                            itemCount: _filesAndFolders.length,
+                                            itemBuilder: (context, index) {
+                                              final pathOrFile = _filesAndFolders[index];
+                                              final isFolder = pathOrFile.endsWith('/');
+                                              final userIdFolder = userIdToFolder.isNotEmpty ? userIdToFolder[index] : '';
+
+                                              return ListTile(
+                                                leading: Icon(
+                                                  isFolder ? Icons.folder : Icons.file_copy,
+                                                  color: isDarkMode ? Colors.white : Colors.black,
+                                                ),
+                                                title: Text(
+                                                  pathOrFile,
+                                                  style: TextStyle(
+                                                    color: isDarkMode ? Colors.white : Colors.black,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                                trailing: isFolder
+                                                    ? Icon(Icons.arrow_forward, color: isDarkMode ? Colors.white : Colors.black)
+                                                    : IconButton(
+                                                  icon: Icon(Icons.download, color: isDarkMode ? Colors.white : Colors.black),
+                                                  tooltip: 'Download',
+                                                  onPressed: () async {
+                                                    final actualFileName = pathOrFile.split(' - ').last;
+
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      SnackBar(content: Text('Downloading $actualFileName...')),
+                                                    );
+
+                                                    await _downloadFile(actualFileName);
+
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      SnackBar(content: Text('Downloaded $actualFileName successfully!')),
+                                                    );
+                                                  },
+                                                ),
+                                                onTap: isFolder
+                                                    ? () {
+                                                  String actualPath;
+                                                  if (pathOrFile.startsWith('enrollment_certificates/')) {
+
+                                                    String userId = pathOrFile.replaceFirst('enrollment_certificates/', '').replaceAll('/', '');
+                                                    actualPath = 'enrollment_certificates/$userId';
+                                                    print("enrollment certificates condition");
+                                                  } else if (_currentPath == 'enrollment_certificates/' || _currentPath == 'enrollment_certificates') {
+
+                                                    String userId = userIdFolder.replaceAll('/', '');
+                                                    actualPath = 'enrollment_certificates/$userId';
+                                                    print("root enrollment certificates condition");
+                                                  } else {
+
+                                                    actualPath = pathOrFile;
+                                                    print("regular folder navigation");
+                                                  }
+
+                                                  _listFilesAndPaths(actualPath);
+                                                }
+                                                    : null,
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    textAlign: TextAlign.center,
                                   ),
-                                ),
 
-                              SizedBox(height: 0),
 
-                              // ListView displaying files and folders
-                            Center(
-                              child: ListView.builder(
-                                shrinkWrap: true, // Prevent ListView from expanding unnecessarily
-                                itemCount: _filesAndFolders.length, // Total number of files/folders
-                                itemBuilder: (context, index) {
-                                  final pathOrFile = _filesAndFolders[index]; // Current file/folder
-                                  final isFolder = pathOrFile.endsWith('/'); // Check if it's a folder
-
-                                  return ListTile(
-                                    leading: Icon(
-                                      isFolder ? Icons.folder : Icons.file_copy, // Show folder or file icon
-                                      color: isDarkMode ? Colors.white : Colors.black, // Adjust icon color
-                                    ),
-                                    title: Text(
-                                      pathOrFile, // Display file or folder name
-                                      style: TextStyle(
-                                        color: isDarkMode ? Colors.white : Colors.black, // Adjust text color
-                                        fontWeight: FontWeight.w500, // Slightly bold text for readability
+                                  if (_currentPath.isNotEmpty)
+                                    Positioned(
+                                      top: 8.0,
+                                      left: 8.0,
+                                      child: IconButton(
+                                        icon: Icon(Icons.arrow_back, color: isDarkMode ? Colors.white : Colors.black),
+                                        onPressed: _goToParentFolder,
                                       ),
                                     ),
-                                    trailing: isFolder
-                                        ? Icon(Icons.arrow_forward, color: isDarkMode ? Colors.white : Colors.black) // Arrow icon for folders
-                                        : IconButton(
-                                      icon: Icon(Icons.download, color: isDarkMode ? Colors.white : Colors.black),
-                                      tooltip: 'Download',
-                                      onPressed: () async {
-                                        // Show a loading indicator in the snackbar during the download
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('Downloading $pathOrFile...')),
-                                        );
-
-                                        // Wait for the file to be downloaded and then show the Snackbar with file path
-                                        await _downloadFile(pathOrFile);
-
-                                        // After download, show the completion snackbar
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('Downloaded $pathOrFile successfully!')),
-                                        );
-                                      },
-                                    ), // Download button for files
-                                    onTap: isFolder
-                                        ? () {
-                                      _listFilesAndPaths(pathOrFile); // Navigate into folder
-                                    }
-                                        : null, // Disable tap action for files
-                                  );
-                                },
+                                ],
                               ),
                             ),
-                            ],
-                          ),
+                          ],
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
 
-          // Back button
+
           Positioned(
             top: 20,
             left: 16,

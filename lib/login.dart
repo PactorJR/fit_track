@@ -10,11 +10,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'dart:io';
+import 'theme_provider.dart';
+import 'package:provider/provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform, // Replace with actual Firebase options generated from CLI.
+    options: DefaultFirebaseOptions.currentPlatform,
   );
   runApp(const MyApp());
 }
@@ -28,13 +31,13 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'FitTrack CCAT',
       theme: ThemeData(
-        primarySwatch: Colors.green,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
+        useMaterial3: true,
       ),
-      home: LoginPage(), // Your login page is the home screen.
+      home: LoginPage(),
     );
   }
 }
-
 
 class LoginPage extends StatefulWidget {
   @override
@@ -45,13 +48,12 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  bool _obscurePassword = true; // Variable to manage the visibility state of the password
-  bool _isLoading = false; // Loading state
-  String errorMessage = ''; // Variable to hold error messages
-  bool rememberMe = false; // Track whether the user selects "Remember Me"
+  bool _obscurePassword = true;
+  bool _isLoading = false;
+  String errorMessage = '';
+  bool rememberMe = false;
   final FlutterSecureStorage storage = FlutterSecureStorage();
 
-  // Method to toggle password visibility
   void _togglePasswordVisibility() {
     setState(() {
       _obscurePassword = !_obscurePassword;
@@ -67,41 +69,35 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _checkRememberMe() async {
     String? value = await storage.read(key: 'isRemembered');
     if (value == 'true') {
-      // Proceed to check if the user is logged in or auto-login logic
       User? user = FirebaseAuth.instance.currentUser;
 
       if (user != null) {
-        // Get user status from Firestore
-        DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection(
+            'users').doc(user.uid).get();
         String userStatus = userDoc['userStatus'];
 
-        // Check if user is "Active"
         if (userStatus == 'Active') {
           String userType = userDoc['userType'];
 
-          // Navigate to the appropriate home page based on user type
           if (userType == 'Admin') {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (context) => MyAdminHomePage(title: 'FitTrack Home')),
+              MaterialPageRoute(builder: (context) =>
+                  MyAdminHomePage(title: 'FitTrack Home')),
             );
           } else {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (context) => MyHomePage(title: 'Home')),
+              MaterialPageRoute(
+                  builder: (context) => MyHomePage(title: 'Home')),
             );
           }
         } else {
-          // Handle if the user status is not "Active"
-          FirebaseAuth.instance.signOut(); // Sign out the user if status is not active
+          FirebaseAuth.instance.signOut();
         }
       }
-    } else {
-      // If 'rememberMe' is false, the user is not auto-logged in
-      print("Auto-login is disabled.");
     }
   }
-
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) {
@@ -109,35 +105,30 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     setState(() {
-      _isLoading = true; // Show loading indicator
+      _isLoading = true;
     });
 
     try {
-      // Attempt to sign in with email and password
       UserCredential userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(
         email: _emailController.text,
         password: _passwordController.text,
       );
 
-      // Store the "remember me" status securely
       if (rememberMe) {
         await storage.write(key: 'isRemembered', value: 'true');
       }
 
-      // Check if the user exists in Firestore
       DocumentSnapshot userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(userCredential.user!.uid)
           .get();
 
       if (userDoc.exists) {
-        // Get userType and userStatus from Firestore
         String userType = userDoc['userType'];
         String userStatus = userDoc['userStatus'];
 
         if (userStatus == 'On Approval') {
-          // Show a dialog to inform the user they are on approval
           showDialog(
             context: context,
             builder: (context) =>
@@ -154,12 +145,12 @@ class _LoginPageState extends State<LoginPage> {
                 ),
           );
         } else if (userStatus == 'Banned') {
-          // Show a dialog to inform the user they are on approval
           showDialog(
             context: context,
             builder: (context) =>
                 AlertDialog(
-                  title: Text('Approval Pending'),
+                  title: Text('Your Account has been banned!',
+                      style: TextStyle(color: Colors.red)),
                   content: Text(
                       'Your account is banned by an Admin. Please contact an admin official of FitTrack to resolve your problem.'),
                   actions: [
@@ -171,94 +162,95 @@ class _LoginPageState extends State<LoginPage> {
                 ),
           );
         } else {
-          // Get the current date and time and format it
           String formattedDateTime = DateFormat('yyyy-MM-dd HH:mm:ss').format(
               DateTime.now());
 
-          // Navigate to appropriate page based on userType
-          if (userType == 'Admin') {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) =>
-                    MyAdminHomePage(
-                        title: 'FitTrack Home'), // Replace with your admin dashboard page
-              ),
-            );
+          if (userStatus == 'Banned') {
+            Navigator.pop(context);
           } else {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => MyHomePage(title: 'Home'),
-              ),
-            );
+            if (userType == 'Admin') {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => MyAdminHomePage(title: 'FitTrack Home'),
+                ),
+              );
+            } else {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => MyHomePage(title: 'Home'),
+                ),
+              );
+            }
           }
         }
       } else {
-        // If user does not exist in Firestore, show an error
         setState(() {
           errorMessage = 'User not found in the database';
         });
       }
-    } catch (e) {
+    } on FirebaseAuthException catch (e) {
       setState(() {
         errorMessage = 'Wrong username or password!';
       });
-      _passwordController.clear(); // Clear the password field
+      _passwordController.clear();
+    } on SocketException {
+      setState(() {
+        errorMessage =
+        'Logging in unsuccessful due to slow internet connection. Please try again!';
+      });
+    } catch (e) {
+      setState(() {
+        errorMessage = 'An unexpected error occurred. Please try again later.';
+      });
     } finally {
       setState(() {
-        _isLoading = false; // Hide loading indicator
+        _isLoading = false;
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    bool isDarkMode = Provider
+        .of<ThemeProvider>(context)
+        .isDarkMode;
     return WillPopScope(
       onWillPop: () async {
-        // Prevent going back to the previous screen after logout
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => MyAppMain()),
-          // Navigate to MyAppMain after logout
-              (Route<
-              dynamic> route) => false, // Remove all previous routes from the stack
+              (Route<dynamic> route) => false,
         );
-        return Future.value(false); // Prevent default back action
+        return Future.value(false);
       },
       child: Scaffold(
         body: Stack(
           children: [
-            // Background image
             Container(
               decoration: BoxDecoration(
                 image: DecorationImage(
                   image: AssetImage('assets/images/bg.png'),
-                  // Replace with your actual background image path
                   fit: BoxFit.cover,
                 ),
               ),
             ),
-
-            // Login Form Content
             SafeArea(
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    // Logo and Title
                     Column(
                       children: [
-                        SizedBox(height: 50), // Added space from the top
+                        SizedBox(height: 50),
                         Image.asset(
                           'assets/images/FitTrack_Icon.png',
-                          // Replace with the actual image path for your logo
                           height: 250,
                         ),
                       ],
                     ),
-
-                    // Email and Password input fields
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 32.0),
                       child: Form(
@@ -269,9 +261,11 @@ class _LoginPageState extends State<LoginPage> {
                               controller: _emailController,
                               decoration: InputDecoration(
                                 hintText: 'Enter email',
+                                hintStyle: TextStyle(
+                                  fontFamily: 'Arial',
+                                ),
                                 filled: true,
                                 fillColor: Colors.white.withOpacity(0.8),
-                                // Make it slightly transparent
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(30),
                                   borderSide: BorderSide(color: Colors.green),
@@ -289,18 +283,19 @@ class _LoginPageState extends State<LoginPage> {
                             TextFormField(
                               controller: _passwordController,
                               obscureText: _obscurePassword,
-                              // Toggles between showing and hiding the password
                               decoration: InputDecoration(
                                 hintText: 'Enter password',
+                                hintStyle: TextStyle(
+                                  fontFamily: 'Arial',
+                                ),
                                 filled: true,
                                 fillColor: Colors.white.withOpacity(0.8),
-                                // Make it slightly transparent
                                 suffixIcon: IconButton(
                                   icon: Icon(
                                     _obscurePassword ? Icons.visibility : Icons
                                         .visibility_off,
                                   ),
-                                  onPressed: _togglePasswordVisibility, // Toggles visibility when the icon is tapped
+                                  onPressed: _togglePasswordVisibility,
                                 ),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(30),
@@ -318,8 +313,6 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                     ),
-
-                    // Remember Me Checkbox
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 32.0),
                       child: Row(
@@ -330,17 +323,14 @@ class _LoginPageState extends State<LoginPage> {
                               setState(() {
                                 rememberMe = value!;
                               });
-                              // Save the updated value to secure storage
-                              storage.write(key: 'isRemembered', value: rememberMe.toString());
+                              storage.write(key: 'isRemembered',
+                                  value: rememberMe.toString());
                             },
                           ),
                           Text("Remember Me"),
                         ],
                       ),
                     ),
-
-
-                    // Error Message
                     if (errorMessage.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -349,16 +339,13 @@ class _LoginPageState extends State<LoginPage> {
                           style: const TextStyle(color: Colors.red),
                         ),
                       ),
-
-                    // Loading Indicator or Login Button
                     if (_isLoading)
                       Center(
-                        child: CircularProgressIndicator(), // Loading indicator
+                        child: CircularProgressIndicator(),
                       )
                     else
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 16.0),
-                        // Space between fields and button
                         child: ElevatedButton(
                           onPressed: _login,
                           style: ElevatedButton.styleFrom(
@@ -372,18 +359,15 @@ class _LoginPageState extends State<LoginPage> {
                           child: Text(
                             'Login',
                             style: const TextStyle(
-                              color: Colors.black,
+                              color: Colors.white,
                             ),
                           ),
                         ),
                       ),
-
-                    // Register and Guest Links
                     Column(
                       children: [
                         Padding(
                           padding: const EdgeInsets.only(bottom: 16.0),
-                          // Space between text and button
                           child: Text("Don't have an account yet?"),
                         ),
                         Row(
@@ -394,7 +378,7 @@ class _LoginPageState extends State<LoginPage> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(builder: (context) =>
-                                      RegisterPage()), // Navigate to RegisterPage
+                                      RegisterPage()),
                                 );
                               },
                               child: Text(
@@ -410,7 +394,7 @@ class _LoginPageState extends State<LoginPage> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(builder: (context) =>
-                                      GuestPage()), // Navigate to GuestPage
+                                      GuestPage()),
                                 );
                               },
                               child: Text(
@@ -428,29 +412,21 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
             ),
-
-            // Permanent Floating Back Button
             Positioned(
-              top: 40, // Position the button at the top
-              left: 20, // Align to the left
+              top: 40,
+              left: 20,
               child: FloatingActionButton(
-                mini: true, // Smaller back button
+                mini: true,
                 backgroundColor: Colors.green,
                 onPressed: () async {
-                  // Log out the user before navigating to MyAppMain
-                  await FirebaseAuth.instance
-                      .signOut(); // Log the user out of Firebase
-
-                  // Also clear the "Remember Me" storage if needed
+                  await FirebaseAuth.instance.signOut();
                   await storage.delete(key: 'isRemembered');
-
-                  // Navigate to MainPage
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(builder: (context) => MyAppMain()),
                   );
                 },
-                child: const Icon(Icons.arrow_back, color: Colors.black),
+                child: const Icon(Icons.arrow_back, color: Colors.white),
               ),
             ),
           ],

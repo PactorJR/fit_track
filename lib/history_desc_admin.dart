@@ -7,7 +7,6 @@ import 'dart:io';
 import 'theme_provider.dart';
 import 'package:provider/provider.dart';
 
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
@@ -16,8 +15,7 @@ void main() async {
 }
 
 @override
-void initState() {
-}
+void initState() {}
 
 class HistoryDescAdminPage extends StatefulWidget {
   final Map<String, dynamic>? logData;
@@ -45,7 +43,6 @@ class _HistoryDescAdminPageState extends State<HistoryDescAdminPage> {
     final isLogout = logData?['scannedQR'] == 'http://www.FitTrack_Logout.com';
     final isCashInLog = logData?.containsKey('amount') ?? false;
 
-    // Determine the background color based on the log type
     final Color containerColor = isLogin
         ? Colors.blue.shade700.withOpacity(0.9)
         : isLogout
@@ -60,18 +57,17 @@ class _HistoryDescAdminPageState extends State<HistoryDescAdminPage> {
           Container(
             decoration: BoxDecoration(
               image: DecorationImage(
-                // Switch between background images based on the dark mode
                 image: AssetImage(
                   themeProvider.isDarkMode
-                      ? 'assets/images/dark_bg.png' // Dark mode background
-                      : 'assets/images/bg.png',    // Light mode background
+                      ? 'assets/images/dark_bg.png'
+                      : 'assets/images/bg.png',
                 ),
                 fit: BoxFit.cover,
               ),
             ),
           ),
           Positioned(
-            top: 300,
+            top: 50,
             left: 0,
             right: 0,
             child: Center(
@@ -93,28 +89,30 @@ class _HistoryDescAdminPageState extends State<HistoryDescAdminPage> {
             ),
           ),
           Positioned(
-            top: 60, // Adjust this value to move the button down
-            left: 16, // Horizontal position
+            top: 60,
+            left: 16,
             child: FloatingActionButton(
-              mini: true, // Smaller back button
+              mini: true,
               backgroundColor: isDarkMode ? Colors.grey : Colors.green,
               onPressed: () {
-                Navigator.of(context)
-                    .pop(); // Navigate back to the previous screen
+                Navigator.of(context).pop();
               },
               child: Icon(Icons.arrow_back, color: Colors.white),
             ),
           ),
-          Center(
+          Positioned(
+            top: 120,
+            left: 16,
+            right: 16,
             child: Container(
               padding: const EdgeInsets.all(16.0),
               decoration: BoxDecoration(
-                color: containerColor, // Apply dynamic background color here
+                color: containerColor,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min, // Adjust size to content
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     isLogin
@@ -127,23 +125,44 @@ class _HistoryDescAdminPageState extends State<HistoryDescAdminPage> {
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black,
+                      color: isLogout
+                          ? Colors.white
+                          : isLogin
+                          ? Colors.white
+                          : isDarkMode
+                          ? Colors.white
+                          : Colors.black,
                     ),
                   ),
                   SizedBox(height: 8),
                   Text(
                     "Details:",
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                    style: TextStyle(fontWeight: FontWeight.bold,
+                      color: isLogout
+                          ? Colors.white
+                          : isLogin
+                          ? Colors.white
+                          : isDarkMode
+                          ? Colors.white
+                          : Colors.black,
+                    ),
                   ),
                   SizedBox(height: 4),
                   Text(
                     isCashInLog
                         ? "Amount: ₱${logData?['amount'] ?? 0}\nCashed-in by: ${logData?['adminName'] ?? 'Unknown Admin'}\nTimestamp: ${timestamp != null ? DateFormat('EEEE, MMMM dd, yyyy hh:mm a').format(timestamp) : 'N/A'}"
                         : "Timestamp: ${timestamp != null ? DateFormat('EEEE, MMMM dd, yyyy hh:mm a').format(timestamp) : 'N/A'}",
-                    style: TextStyle(fontSize: 16),
+                    style: TextStyle(fontSize: 16,
+                      color: isLogout
+                      ? Colors.white
+                          : isLogin
+                          ? Colors.white
+                          : isDarkMode
+                      ? Colors.white
+                      : Colors.black,
+                    ),
                   ),
                   SizedBox(height: 16),
-                  // Display the transaction ID
                   Text(
                     'Transaction ID: $transactionId',
                     style: TextStyle(
@@ -161,5 +180,3 @@ class _HistoryDescAdminPageState extends State<HistoryDescAdminPage> {
     );
   }
 }
-
-

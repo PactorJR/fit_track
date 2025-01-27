@@ -41,7 +41,6 @@ class _HistoryDescPageState extends State<HistoryDescPage> {
     final isLogout = logData?['scannedQR'] == 'http://www.FitTrack_Logout.com';
     final isCashInLog = logData?.containsKey('amount') ?? false;
 
-    // Determine the background color based on the log type
     final Color containerColor = isLogin
         ? Colors.green.withOpacity(0.9)
         : isLogout
@@ -56,11 +55,10 @@ class _HistoryDescPageState extends State<HistoryDescPage> {
           Container(
             decoration: BoxDecoration(
               image: DecorationImage(
-                // Switch between background images based on the dark mode
                 image: AssetImage(
                   themeProvider.isDarkMode
-                      ? 'assets/images/dark_bg.png' // Dark mode background
-                      : 'assets/images/bg.png',    // Light mode background
+                      ? 'assets/images/dark_bg.png'
+                      : 'assets/images/bg.png',
                 ),
                 fit: BoxFit.cover,
               ),
@@ -89,14 +87,14 @@ class _HistoryDescPageState extends State<HistoryDescPage> {
             ),
           ),
           Positioned(
-            top: 60, // Adjust this value to move the button down
-            left: 16, // Horizontal position
+            top: 60,
+            left: 16,
             child: FloatingActionButton(
-              mini: true, // Smaller back button
+              mini: true,
               backgroundColor: isDarkMode ? Colors.grey : Colors.green,
               onPressed: () {
                 Navigator.of(context)
-                    .pop(); // Navigate back to the previous screen
+                    .pop();
               },
               child: Icon(Icons.arrow_back, color: Colors.white),
             ),
@@ -105,12 +103,12 @@ class _HistoryDescPageState extends State<HistoryDescPage> {
             child: Container(
               padding: const EdgeInsets.all(16.0),
               decoration: BoxDecoration(
-                color: containerColor, // Apply dynamic background color here
+                color: containerColor,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min, // Adjust size to content
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     isLogin

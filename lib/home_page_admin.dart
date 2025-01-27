@@ -37,7 +37,7 @@ void main() async {
 
   runApp(MyApp(
     selectedIndex: payload == 'new_user' ? 1 : 0,
-    docId: null, // Default to null unless provided
+    docId: null,
   ));
 }
 
@@ -46,7 +46,7 @@ FlutterLocalNotificationsPlugin();
 
 class MyApp extends StatelessWidget {
   final int selectedIndex;
-  final String? docId; // Nullable docId parameter
+  final String? docId;
 
   const MyApp({super.key, this.selectedIndex = 0, this.docId});
 
@@ -61,24 +61,21 @@ class MyApp extends StatelessWidget {
       home: MyAdminHomePage(
         title: 'Admin Dashboard',
         selectedIndex: selectedIndex,
-        docId: docId, // Pass docId to MyAdminHomePage
+        docId: docId,
       ),
     );
   }
 }
 
-
-
-
 class MyAdminHomePage extends StatefulWidget {
   const MyAdminHomePage({
     super.key,
     required this.title,
-    this.selectedIndex = 0, // Default to the first tab
-    this.docId, // Optional transferable data
+    this.selectedIndex = 0,
+    this.docId,
   });
 
-  final String? docId; // Nullable docId for optional data transfer
+  final String? docId;
   final String title;
   final int selectedIndex;
 
@@ -87,21 +84,16 @@ class MyAdminHomePage extends StatefulWidget {
 }
 
 class NotificationManager {
-  // Private constructor and static instance
   static final NotificationManager _instance = NotificationManager._privateConstructor();
 
-  // Public factory constructor to access the singleton instance
   factory NotificationManager() {
     return _instance;
   }
 
-  // Private named constructor
   NotificationManager._privateConstructor();
 
-  // Track the shown notification IDs
   Set<int> shownNotificationIds = Set();
 
-  // Method to load notification IDs from storage
   Future<void> loadShownNotificationIds() async {
     String? storedIds = await storage.read(key: 'shownNotificationIds');
     if (storedIds != null) {
@@ -109,7 +101,6 @@ class NotificationManager {
     }
   }
 
-  // Method to save notification IDs to storage
   Future<void> saveShownNotificationIds() async {
     await storage.write(key: 'shownNotificationIds', value: shownNotificationIds.join(','));
   }
@@ -121,12 +112,10 @@ class _MyHomePageState extends State<MyAdminHomePage> {
   late String _currentTitle;
   late bool _isDarkMode;
   Set<String> shownNotificationIds = Set<String>();
-  bool _isRemembered = false; // To track if the user is remembered
   bool _hasCheckedNewUsers = false;
   bool _hasCheckedNewCashInLogs = false;
   bool _hasCheckedNewLogs = false;
-
-  // List of pages for the BottomNavigationBar
+  late Timer _notificationTimer;
   final List<Widget> _bottomNavPages = [
     HomePage(),
     AlertsPageAdmin(),
@@ -134,7 +123,6 @@ class _MyHomePageState extends State<MyAdminHomePage> {
     MenuAdminPage(),
   ];
 
-  // Map of titles for each tab index
   final Map<int, String> _tabTitles = {
     0: 'Admin Dashboard',
     1: 'Admin Alerts',
@@ -142,48 +130,66 @@ class _MyHomePageState extends State<MyAdminHomePage> {
     3: 'Admin Menu',
   };
 
-  // Load the shownNotificationIds set from SharedPreferences for different keys
   Future<Set<String>> loadShownNotificationIds({String key = 'shownNotificationIds'}) async {
     final prefs = await SharedPreferences.getInstance();
     final List<String> storedIds = prefs.getStringList(key) ?? [];
     return storedIds.toSet();
   }
 
-// Save the shownNotificationIds set to SharedPreferences for different keys
   Future<void> saveShownNotificationIds(Set<String> shownNotificationIds, {String key = 'shownNotificationIds'}) async {
     final prefs = await SharedPreferences.getInstance();
     prefs.setStringList(key, shownNotificationIds.toList());
   }
 
-
-
   @override
   void initState() {
     super.initState();
     _isDarkMode = false;
+    if (!_hasCheckedNewUsers) {
+      _checkNewUsers();
+      _hasCheckedNewUsers = true;
+    }
 
-    // Initialize the current index and title based on the passed parameters
+    if (!_hasCheckedNewCashInLogs) {
+      _checkNewCashInLogs();
+      _hasCheckedNewCashInLogs = true;
+    }
+
+    if (!_hasCheckedNewLogs) {
+      _checkNewLogs();
+      _hasCheckedNewLogs = true;
+    }
     _selectedBottomNavIndex = widget.selectedIndex;
     _currentTitle = _tabTitles[_selectedBottomNavIndex] ?? 'Admin Dashboard';
-    _checkRememberMe(); // Check if the user is remembered
     _initializeNotifications();
+    _startNotificationStatusChecker();
+  }
+
+  void _startNotificationStatusChecker() {
+    _notificationTimer = Timer.periodic(Duration(minutes: 1), (timer) {
+      _initializeNotifications();
+      print("every 1 minute");
+    });
+  }
+
+  @override
+  void dispose() {
+    _notificationTimer.cancel();
+    super.dispose();
   }
 
   Future<void> _checkNewUsers() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       print("No user logged in, skipping log check.");
-      return; // Exit if no user is logged in
+      return;
     }
 
-    if (!_isRemembered) return; // Exit if the user is not remembered
-
-    // Load the set of shown notification IDs for users
-    Set<String> shownNotificationIds = await loadShownNotificationIds(key: 'shownNotificationIds_users');  // Use unique key for users
+    Set<String> shownNotificationIds = await loadShownNotificationIds(key: 'shownNotificationIds_users');
 
     FirebaseFirestore.instance
         .collection('users')
-        .where('seen', isEqualTo: false) // Only listen for new users that are unapproved
+        .where('seen', isEqualTo: false)
         .snapshots()
         .listen((snapshot) async {
       if (snapshot.docs.isNotEmpty) {
@@ -192,51 +198,40 @@ class _MyHomePageState extends State<MyAdminHomePage> {
           String lastName = doc['lastName'] ?? '';
           String userName = '$firstName $lastName';
           String email = doc['email'] ?? '';
-          Timestamp registrationTime = doc['registerTime']; // Assuming this exists
+          Timestamp registrationTime = doc['registerTime'];
 
-          // Format the registration time
           String formattedRegistrationTime = DateFormat('yyyy-MM-dd HH:mm:ss').format(registrationTime.toDate());
 
-          String logId = doc.id;  // Use the document ID as the logId
+          String logId = doc.id;
 
-          // Check if this user has already been notified
           if (shownNotificationIds.contains(logId)) {
             print("Notification already shown for user with logId: $logId. Skipping.");
-            continue; // Skip this user if already notified
+            continue;
           }
 
-          // Generate a unique notificationId based on doc.id
           int notificationId = logId.hashCode;
 
-          // Show the notification with additional information and unique ID
           _showNewUserNotification(userName, email, formattedRegistrationTime, notificationId);
 
-          // Add the logId to the set of shown notifications to avoid duplicates
           shownNotificationIds.add(logId);
           print("Added user logId $logId to shownNotificationIds: $shownNotificationIds");
 
-          // Save the updated set of shown notification IDs to SharedPreferences
-          await saveShownNotificationIds(shownNotificationIds, key: 'shownNotificationIds_users');  // Use unique key for users
+          await saveShownNotificationIds(shownNotificationIds, key: 'shownNotificationIds_users');
         }
       }
     });
   }
 
-
-
-  // Method to show notification with user details
   Future<void> _showNewUserNotification(
       String userName, String email, String formattedRegistrationTime, int notificationId) async {
 
-    // Check if this notificationId has already been shown using the singleton
     if (NotificationManager().shownNotificationIds.contains(notificationId)) {
       debugPrint('Notification already shown for this ID: $notificationId');
-      return; // Don't show the notification if we've already shown it
+      return;
     }
 
     debugPrint('Showing notification for user: $userName with ID: $notificationId');
 
-    // Create the expanded notification style with additional information
     String notificationMessage =
         '$userName has registered and is awaiting approval.\n\nAdditional Information:\n- Email: $email\n- Registration Time: $formattedRegistrationTime';
 
@@ -258,23 +253,21 @@ class _MyHomePageState extends State<MyAdminHomePage> {
     NotificationDetails notificationDetails = NotificationDetails(android: androidDetails);
 
     await flutterLocalNotificationsPlugin.show(
-      notificationId, // Use unique notification ID
+      notificationId,
       'New User Registered',
       '$userName has registered and is awaiting approval',
       notificationDetails,
-      payload: 'new_user', // Pass payload for navigation
+      payload: 'new_user',
     );
     debugPrint('Notification shown with payload: new_user');
 
-    // Add this notificationId to the set to track it
     NotificationManager().shownNotificationIds.add(notificationId);
 
-    // Save the updated list of shown notification IDs using the singleton
     await NotificationManager().saveShownNotificationIds();
   }
 
   Future<void> _showNewCashInLogNotification(String message, {required String logId}) async {
-    int notificationId = logId.hashCode; // Generate a unique ID based on logId
+    int notificationId = logId.hashCode;
 
     AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
       'cash_in_logs_channel',
@@ -300,23 +293,18 @@ class _MyHomePageState extends State<MyAdminHomePage> {
       notificationDetails,
       payload: 'new_cash_in',
     );
-    // Save this notificationId to the singleton
     NotificationManager().shownNotificationIds.add(notificationId);
 
-    // Save the updated list of shown notification IDs using the singleton
     await NotificationManager().saveShownNotificationIds();
   }
 
-  // Method to check new cash-in logs and show notifications
   Future<void> _checkNewCashInLogs() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       print("No user logged in, skipping log check.");
-      return; // Exit if no user is logged in
+      return;
     }
-    if (!_isRemembered) return; // Exit if the user is not remembered
 
-    // Load the set of shown notification IDs for cash-in logs
     Set<String> shownNotificationIds = await loadShownNotificationIds(key: 'shownNotificationIds_cashinlogs');
 
     FirebaseFirestore.instance
@@ -326,102 +314,59 @@ class _MyHomePageState extends State<MyAdminHomePage> {
         .listen((snapshot) async {
       if (snapshot.docs.isNotEmpty) {
         for (var doc in snapshot.docs) {
-          String logId = doc.id; // Get the unique ID of the log
+          String logId = doc.id;
 
-          // Check if this log has already been notified
           if (shownNotificationIds.contains(logId)) {
             print("Notification already shown for logId: $logId. Skipping.");
-            continue; // Skip if this log has already been notified
+            continue;
           }
 
-          String adminName = doc['adminName'] ?? '';
-          int amount = (doc['amount']?.toDouble() ?? 0.0).toInt();  // Convert to int
-          Timestamp scannedTime = doc['scannedTime'];
-          String userName = doc['userName'] ?? '';
+          String adminName = doc['adminName'] ?? 'Unknown Admin';
+          int amount = (doc['amount']?.toDouble() ?? 0.0).toInt();
+          Timestamp? scannedTime = doc['scannedTime'] as Timestamp?;
+          String userName = doc['userName'] ?? 'Unknown User';
 
-          // Format the scanned time
-          String formattedTime = DateFormat('yyyy-MM-dd HH:mm:ss').format(scannedTime.toDate());
+          String formattedTime = scannedTime != null
+              ? DateFormat('yyyy-MM-dd HH:mm:ss').format(scannedTime.toDate())
+              : 'Unknown Time';
 
-          // Create the notification message
           String notificationMessage =
               'New cash-in log for $userName by $adminName. \n\nAdditional information:\n- Admin: $adminName\n- User: $userName\n- Amount: ₱${amount.toStringAsFixed(2)}\n- Time: $formattedTime';
 
-          // Show the notification
           _showNewCashInLogNotification(notificationMessage, logId: logId);
 
-          // Add this logId to the set of shown notifications to avoid duplicates
           shownNotificationIds.add(logId);
 
-          // Save the updated set to SharedPreferences after each addition
           await saveShownNotificationIds(shownNotificationIds, key: 'shownNotificationIds_cashinlogs');
         }
       }
     });
   }
 
-
-
-  // Check if the user has enabled "Remember Me"
-  Future<void> _checkRememberMe() async {
-    String? value = await storage.read(key: 'isRemembered');
-
-    if (value == 'true') {
-      setState(() {
-        _isRemembered = true;
-      });
-
-      // Check and trigger notifications only if not already initialized
-      if (!_hasCheckedNewUsers) {
-        _checkNewUsers();
-        _hasCheckedNewUsers = true; // Mark as initialized
-      }
-
-      if (!_hasCheckedNewCashInLogs) {
-        _checkNewCashInLogs();
-        _hasCheckedNewCashInLogs = true; // Mark as initialized
-      }
-
-      if (!_hasCheckedNewLogs) {
-        _checkNewLogs();
-        _hasCheckedNewLogs = true; // Mark as initialized
-      }
-
-      // Call _initializeNotifications only after confirming the user is remembered
-      await _initializeNotifications();
-    } else {
-      debugPrint('User is not remembered. Notifications will not run.');
-    }
-  }
-
   Future<void> _initializeNotifications() async {
-    // Prevent unnecessary re-initialization
     if (_hasCheckedNewUsers && _hasCheckedNewCashInLogs && _hasCheckedNewLogs) {
       print("Notifications already initialized. Skipping.");
       return;
     }
 
-    // Proceed with initialization only if notifications haven't been initialized
     for (String logId in shownNotificationIds) {
       if (shownNotificationIds.contains(logId)) {
         print("Notification already shown for logId: $logId. Skipping initialization.");
-        return; // Skip initialization if any logId is found in the shownNotificationIds
+        return;
       }
     }
 
-    // If no match was found, proceed with initialization
     const AndroidInitializationSettings initializationSettingsAndroid =
     AndroidInitializationSettings('drawable/app_icon');
 
     final InitializationSettings initializationSettings =
     InitializationSettings(android: initializationSettingsAndroid);
 
-    // Initialize local notifications
     await flutterLocalNotificationsPlugin.initialize(
       initializationSettings,
       onDidReceiveNotificationResponse: _onNotificationResponse,
     );
 
-    // Mark initialization complete
     _hasCheckedNewUsers = true;
     _hasCheckedNewCashInLogs = true;
     _hasCheckedNewLogs = true;
@@ -432,7 +377,6 @@ class _MyHomePageState extends State<MyAdminHomePage> {
   Future<void> _onNotificationResponse(NotificationResponse response) async {
     debugPrint('Notification tapped with payload: ${response.payload}');
 
-    // Define a map for payloads and their corresponding selectedIndex
     final Map<String, int> payloadActions = {
       'new_login': 1,
       'new_logout': 1,
@@ -440,12 +384,10 @@ class _MyHomePageState extends State<MyAdminHomePage> {
       'new_user': 1,
     };
 
-    // Get the target index from the map or use 0 if payload is not found
     int targetIndex = payloadActions[response.payload] ?? 0;
 
     debugPrint('Navigating to Admin Home with selectedIndex: $targetIndex');
 
-    // Navigate to MyAdminHomePage with the selectedIndex
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
@@ -461,12 +403,9 @@ class _MyHomePageState extends State<MyAdminHomePage> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       print("No user logged in, skipping log check.");
-      return; // Exit if no user is logged in
+      return;
     }
 
-    if (!_isRemembered) return;
-
-    // Load the set of shown notification IDs for log history
     Set<String> shownNotificationIds = await loadShownNotificationIds(key: 'shownNotificationIds_logs');
 
     FirebaseFirestore.instance
@@ -476,24 +415,23 @@ class _MyHomePageState extends State<MyAdminHomePage> {
         .listen((snapshot) async {
       if (snapshot.docs.isNotEmpty) {
         for (var doc in snapshot.docs) {
-          String logId = doc.id; // Use raw doc.id as a String
+          String logId = doc.id;
 
-          // Check if this logId has already been shown (skip it if it's in the set)
           if (shownNotificationIds.contains(logId)) {
             print("Notification already shown for logId: $logId. Skipping.");
-            continue; // Skip the rest of the loop if logId has already been notified
+            continue;
           }
 
-          String firstName = doc['firstName'] ?? '';
-          String lastName = doc['lastName'] ?? '';
+          String firstName = doc['firstName'] ?? 'Unknown';
+          String lastName = doc['lastName'] ?? 'User';
           String userName = '$firstName $lastName';
-          Timestamp scannedTime = doc['scannedTime'];
-          String logType = doc['type'] ?? '';
+          Timestamp? scannedTime = doc['scannedTime'] as Timestamp?;
+          String logType = doc['type'] ?? 'Unknown';
 
-          // Format the scanned time
-          String formattedTime = DateFormat('yyyy-MM-dd HH:mm:ss').format(scannedTime.toDate());
+          String formattedTime = scannedTime != null
+              ? DateFormat('yyyy-MM-dd HH:mm:ss').format(scannedTime.toDate())
+              : 'Unknown Time';
 
-          // Create the notification message based on the type (login/logout)
           String notificationMessage = '';
           if (logType == 'login') {
             notificationMessage =
@@ -503,13 +441,10 @@ class _MyHomePageState extends State<MyAdminHomePage> {
             'New logout log for $userName. \n\nDetails:\n- User: $userName\n- Time: $formattedTime';
           }
 
-          // Show the notification and mark it as shown
           _showNewLogNotification(notificationMessage, logId: logId, logType: logType);
 
-          // Add the logId to the set of shown notifications, ensuring no duplicates
           shownNotificationIds.add(logId);
 
-          // Save the updated set to SharedPreferences
           await saveShownNotificationIds(shownNotificationIds, key: 'shownNotificationIds_logs');
         }
       }
@@ -517,16 +452,15 @@ class _MyHomePageState extends State<MyAdminHomePage> {
   }
 
   Future<void> _showNewLogNotification(String message, {required String logId, required String logType}) async {
-    int notificationId = logId.hashCode; // Generate a unique ID based on logId
+    int notificationId = logId.hashCode;
 
-    // Set the payload based on the log type (login or logout)
     String payload = '';
     if (logType == 'login') {
       payload = 'new_login';
     } else if (logType == 'logout') {
       payload = 'new_logout';
     } else {
-      payload = 'new_log'; // Default case, if type is unrecognized
+      payload = 'new_log';
     }
 
     AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
@@ -551,84 +485,164 @@ class _MyHomePageState extends State<MyAdminHomePage> {
       'New Log Notification',
       message,
       notificationDetails,
-      payload: payload,  // Pass the dynamic payload
+      payload: payload,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    bool isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: isDarkMode ? Colors.black : Colors.green.shade200, // Change to white in dark mode
-        automaticallyImplyLeading: false,
-        title: Row(
-          children: [
-            Image.asset(
-              isDarkMode
-                  ? 'assets/images/FitTrack_Icon_Dark.png' // Dark mode image
-                  : 'assets/images/FitTrack_Icon.png',    // Light mode image
-              width: 40,
-              height: 40,
-            ),
-            SizedBox(width: 8),
-            Text(
-              _currentTitle,
-              style: TextStyle(
-                color: isDarkMode ? Colors.green : Colors.black, // Change text color to black in dark mode
+    bool isDarkMode = themeProvider.isDarkMode;
+
+    double screenWidth = MediaQuery.of(context).size.width;
+
+    double iconSize = screenWidth * 0.06;
+    double textSize = screenWidth * 0.02;
+    double bottomAppBarHeight = screenWidth * 0.18;
+
+    return WillPopScope(
+      onWillPop: () async {
+        return false;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: isDarkMode ? Colors.black : Colors.green.shade200,
+          automaticallyImplyLeading: false,
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              Image.asset(
+                isDarkMode
+                    ? 'assets/images/FitTrack_Icon_Dark.png'
+                    : 'assets/images/FitTrack_Icon.png',
+                width: 40,
+                height: 40,
               ),
-            ),
-          ],
+              Text(
+                _currentTitle,
+                style: TextStyle(
+                  color: isDarkMode ? Colors.green : Colors.black,
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-      body: _bottomNavPages[_selectedBottomNavIndex],
-      bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 10,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.table_view),
-              color: _selectedBottomNavIndex == 0 ? Colors.green : Colors.grey,
-              onPressed: () => _onBottomNavTapped(0),
+        body: _bottomNavPages[_selectedBottomNavIndex],
+        bottomNavigationBar: BottomAppBar(
+          height: bottomAppBarHeight,
+          shape: const CircularNotchedRectangle(),
+          notchMargin: 10,
+          child: Container(
+            height: bottomAppBarHeight,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: () => _onBottomNavTapped(0),
+                      child: Icon(
+                        Icons.table_view,
+                        size: iconSize,
+                        color: _selectedBottomNavIndex == 0 ? Colors.green : Colors.grey,
+                      ),
+                    ),
+                    Text(
+                      'Dashboard',
+                      style: TextStyle(
+                        color: _selectedBottomNavIndex == 0 ? Colors.green : Colors.grey,
+                        fontSize: textSize,
+                      ),
+                    ),
+                  ],
+                ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: () => _onBottomNavTapped(1),
+                      child: Icon(
+                        Icons.notifications,
+                        size: iconSize,
+                        color: _selectedBottomNavIndex == 1 ? Colors.green : Colors.grey,
+                      ),
+                    ),
+                    Text(
+                      'Notifications',
+                      style: TextStyle(
+                        color: _selectedBottomNavIndex == 1 ? Colors.green : Colors.grey,
+                        fontSize: textSize,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(width: 60),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: () => _onBottomNavTapped(2),
+                      child: Icon(
+                        Icons.history,
+                        size: iconSize,
+                        color: _selectedBottomNavIndex == 2 ? Colors.green : Colors.grey,
+                      ),
+                    ),
+                    Text(
+                      'History',
+                      style: TextStyle(
+                        color: _selectedBottomNavIndex == 2 ? Colors.green : Colors.grey,
+                        fontSize: textSize,
+                      ),
+                    ),
+                  ],
+                ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: () => _onBottomNavTapped(3),
+                      child: Icon(
+                        Icons.menu,
+                        size: iconSize,
+                        color: _selectedBottomNavIndex == 3 ? Colors.green : Colors.grey,
+                      ),
+                    ),
+                    Text(
+                      'Menu',
+                      style: TextStyle(
+                        color: _selectedBottomNavIndex == 3 ? Colors.green : Colors.grey,
+                        fontSize: textSize,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            IconButton(
-              icon: const Icon(Icons.notifications),
-              color: _selectedBottomNavIndex == 1 ? Colors.green : Colors.grey,
-              onPressed: () => _onBottomNavTapped(1),
-            ),
-            const SizedBox(width: 40), // Space for FAB in the center
-            IconButton(
-              icon: const Icon(Icons.history),
-              color: _selectedBottomNavIndex == 2 ? Colors.green : Colors.grey,
-              onPressed: () => _onBottomNavTapped(2),
-            ),
-            IconButton(
-              icon: const Icon(Icons.menu),
-              color: _selectedBottomNavIndex == 3 ? Colors.green : Colors.grey,
-              onPressed: () => _onBottomNavTapped(3),
-            ),
-          ],
+          ),
         ),
-      ),
-      floatingActionButton: SizedBox(
-        height: 100.0,
-        width: 100.0,
-        child: RawMaterialButton(
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => ScanPage()),
-            );
-          },
-          shape: const CircleBorder(),
-          fillColor: Colors.white,
-          child: const Icon(Icons.qr_code_scanner, size: 50, color: Colors.green),
+        floatingActionButton: SizedBox(
+          height: screenWidth * 0.2,
+          width: screenWidth * 0.2,
+          child: RawMaterialButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => ScanPage()),
+              );
+            },
+            shape: const CircleBorder(),
+            fillColor: Colors.white,
+            child: Icon(Icons.qr_code_scanner, size: screenWidth * 0.12, color: Colors.green),
+          ),
         ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
 
@@ -670,7 +684,7 @@ class _HomePageState extends State<HomePage> {
     fetchUserCounts();
     getDailyCounts().then((counts) {
       setState(() {
-        dailyCounts = counts; // Update the dailyCounts after fetching data
+        dailyCounts = counts;
       });
     }).catchError((e) {
       print("Error fetching data: $e");
@@ -709,7 +723,7 @@ class _HomePageState extends State<HomePage> {
         fetchUserCounts(),
         getDailyCounts().then((counts) {
           setState(() {
-            dailyCounts = counts; // Update the dailyCounts after fetching data
+            dailyCounts = counts;
           });
         }).catchError((e) {
           print("Error fetching daily counts: $e");
@@ -722,131 +736,105 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-
-
   Future<void> _onRefresh() async {
-    await _fetchAllData(); // Refresh all data
+    await _fetchAllData();
   }
-
 
   String formatDateTime(DateTime dateTime) {
     String year = dateTime.year.toString();
-    String month = dateTime.month.toString().padLeft(
-        2, '0'); // Ensure 2-digit month
-    String day = dateTime.day.toString().padLeft(2, '0'); // Ensure 2-digit day
-    String hour = dateTime.hour.toString().padLeft(
-        2, '0'); // Ensure 2-digit hour
-    String minute = dateTime.minute.toString().padLeft(
-        2, '0'); // Ensure 2-digit minute
-    String second = dateTime.second.toString().padLeft(
-        2, '0'); // Ensure 2-digit second
+    String month = dateTime.month.toString().padLeft(2, '0');
+    String day = dateTime.day.toString().padLeft(2, '0');
+    String hour = dateTime.hour.toString().padLeft(2, '0');
+    String minute = dateTime.minute.toString().padLeft(2, '0');
+    String second = dateTime.second.toString().padLeft(2, '0');
 
     return '$year-$month-$day-$hour-$minute-$second';
   }
 
   Future<void> fetchActiveUsersCount() async {
     try {
-      // Query to fetch documents where 'userStatus' is 'Active'
       QuerySnapshot snapshot = await FirebaseFirestore.instance
           .collection('users')
-          .where('userStatus', isEqualTo: 'Active') // Filter by 'Active' status
+          .where('userStatus', isEqualTo: 'Active')
           .get();
 
-      // Debugging: Print the number of documents fetched
       print("Fetched ${snapshot.docs.length} active users.");
 
       setState(() {
-        activeUsersCount = snapshot.docs.length; // Count active users only
+        activeUsersCount = snapshot.docs.length;
       });
     } catch (e) {
-      // Handle errors (e.g., connection issues)
       print("Error fetching active users count: $e");
     }
   }
 
   Future<void> fetchUserCounts() async {
     try {
-      // Fetch all users from the 'users' collection
       QuerySnapshot usersSnapshot = await FirebaseFirestore.instance
           .collection('users')
           .get();
 
-      // Debugging: Print the total number of users fetched
       print("Fetched ${usersSnapshot.docs.length} total users.");
 
       setState(() {
-        totalUsersCount = usersSnapshot.docs
-            .length; // Total number of users in the collection
+        totalUsersCount = usersSnapshot.docs.length;
       });
     } catch (e) {
-      // Handle any errors that occur during the fetch
       print("Error fetching total users count: $e");
     }
   }
 
   Future<void> fetchBannedUsersCount() async {
     try {
-      // Query to fetch documents where 'userStatus' is 'Active'
       QuerySnapshot snapshot = await FirebaseFirestore.instance
           .collection('users')
-          .where('userStatus', isEqualTo: 'Banned') // Filter by 'Banned' status
+          .where('userStatus', isEqualTo: 'Banned')
           .get();
 
-      // Debugging: Print the number of documents fetched
       print("Fetched ${snapshot.docs.length} banned users.");
 
       setState(() {
-        bannedUsersCount = snapshot.docs.length; // Count active users only
+        bannedUsersCount = snapshot.docs.length;
       });
     } catch (e) {
-      // Handle errors (e.g., connection issues)
       print("Error fetching banned users count: $e");
     }
   }
 
   Future<void> fetchTotalIncome() async {
-    // Clear the previous total income before fetching new data
     totalIncome = 0;
 
-    // Fetch all documents from the 'cashinlogs' collection
     QuerySnapshot snapshot = await FirebaseFirestore.instance.collection(
         'cashinlogs').get();
 
-    // Debugging: Print the document IDs and the amount field to check if it's correctly accessed
     for (var doc in snapshot.docs) {
       print('Document ID: ${doc.id}');
-      print('Amount Field: ${doc['amount']}'); // Log the 'amount' field
+      print('Amount Field: ${doc['amount']}');
 
-      // If 'amount' exists and is of type int, add to totalIncome
       var amount = doc['amount'];
       if (amount is int) {
         totalIncome += amount;
       } else if (amount is double) {
-        totalIncome += amount.toInt(); // Convert double to int if necessary
+        totalIncome += amount.toInt();
       } else {
         print("No valid amount field or wrong type in document ${doc.id}");
       }
     }
 
-    // Trigger UI update
     setState(() {});
   }
 
-  // Fetch data from Firestore and calculate total and monthly income
   Future<void> fetchMonthlyIncome() async {
-    Map<int, int> incomeByMonth = {}; // Local map to store income by month
+    Map<int, int> incomeByMonth = {};
 
-    // Fetch all documents from the 'cashinlogs' collection
     QuerySnapshot snapshot = await FirebaseFirestore.instance.collection(
         'cashinlogs').get();
 
     for (var doc in snapshot.docs) {
       DateTime scannedDate = (doc['scannedTime'] as Timestamp).toDate();
-      int month = scannedDate.month; // Get the month from the scannedTime
-      int amount = doc['amount'] ??
-          0; // Get the amount field, default to 0 if null
+      int month = scannedDate.month;
+      int amount = doc['amount'] ?? 0;
 
-      // Sum income for each month
       if (incomeByMonth.containsKey(month)) {
         incomeByMonth[month] = incomeByMonth[month]! + amount;
       } else {
@@ -854,113 +842,101 @@ class _HomePageState extends State<HomePage> {
       }
     }
 
-    // Calculate total income (sum of all monthly income)
-    totalIncome = incomeByMonth.values.reduce((a, b) => a + b);
+    totalIncome = incomeByMonth.isNotEmpty
+        ? incomeByMonth.values.reduce((a, b) => a + b)
+        : 0;
 
-    // Update the state with monthly income data
     setState(() {
       monthlyIncome = incomeByMonth;
     });
   }
 
-  Future<void> fetchLoginCounts() async {
-    final now = DateTime.now().toUtc(); // Get the current UTC time
-    final startOfMonth = DateTime.utc(
-        now.year, now.month, 1); // Start of this month
-    final endOfMonth = DateTime.utc(now.year, now.month + 1, 1).subtract(
-        Duration(seconds: 1)); // End of this month
 
-    // Debug: Print the range you're querying
+  Future<void> fetchLoginCounts() async {
+    final now = DateTime.now().toUtc();
+    final startOfMonth = DateTime.utc(now.year, now.month, 1);
+    final endOfMonth = DateTime.utc(now.year, now.month + 1, 1).subtract(
+        Duration(seconds: 1));
+
     print("Start of month: $startOfMonth");
     print("End of month: $endOfMonth");
 
-    // Fetch documents from the loghistory collection
     QuerySnapshot snapshot = await FirebaseFirestore.instance.collection(
         'loghistory').get();
 
-    // Check if there are any documents in the snapshot
     print("Number of documents fetched: ${snapshot.docs.length}");
 
-    // Iterate over the documents
     for (var doc in snapshot.docs) {
-      // Check if the 'type' field is 'login'
       if (doc['type'] == 'login') {
-        // Extract the timestamp and convert to DateTime
         if (doc['scannedTime'] is Timestamp) {
-          DateTime loginTime = (doc['scannedTime'] as Timestamp)
-              .toDate(); // Convert Timestamp to DateTime
+          DateTime loginTime = (doc['scannedTime'] as Timestamp).toDate();
 
-          // Debug: Print the login time for each document
           print("Login Time: $loginTime");
 
-          // Extract the month component of the login time
           int loginMonth = loginTime.month;
 
-          // Debug: Print the login month
           print("Login Month: $loginMonth");
 
-          // Use a switch statement to update the monthlyCounts based on loginMonth
           switch (loginMonth) {
             case 1:
-              monthlyCounts[0]++; // January
+              monthlyCounts[0]++;
               break;
             case 2:
-              monthlyCounts[1]++; // February
+              monthlyCounts[1]++;
               break;
             case 3:
-              monthlyCounts[2]++; // March
+              monthlyCounts[2]++;
               break;
             case 4:
-              monthlyCounts[3]++; // April
+              monthlyCounts[3]++;
               break;
             case 5:
-              monthlyCounts[4]++; // May
+              monthlyCounts[4]++;
               break;
             case 6:
-              monthlyCounts[5]++; // June
+              monthlyCounts[5]++;
               break;
             case 7:
-              monthlyCounts[6]++; // July
+              monthlyCounts[6]++;
               break;
             case 8:
-              monthlyCounts[7]++; // August
+              monthlyCounts[7]++;
               break;
             case 9:
-              monthlyCounts[8]++; // September
+              monthlyCounts[8]++;
               break;
             case 10:
-              monthlyCounts[9]++; // October
+              monthlyCounts[9]++;
               break;
             case 11:
-              monthlyCounts[10]++; // November
+              monthlyCounts[10]++;
               break;
             case 12:
-              monthlyCounts[11]++; // December
+              monthlyCounts[11]++;
               break;
             default:
               print("Invalid month: $loginMonth");
               break;
           }
 
-          // Debug: Print the updated monthlyCounts after each login
           print("Updated monthlyCounts: $monthlyCounts");
         } else {
           print("Invalid 'scannedTime' field: ${doc['scannedTime']}");
         }
       } else {
-        // If it's not a login, don't count it
         print("Skipping document with type: ${doc['type']}");
       }
     }
 
-    // Debug: Print the final monthly counts
     print("Final Monthly login counts: $monthlyCounts");
   }
 
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    bool isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
+    bool isDarkMode = Provider
+        .of<ThemeProvider>(context)
+        .isDarkMode;
     return Scaffold(
       body: Stack(
         children: [
@@ -969,15 +945,15 @@ class _HomePageState extends State<HomePage> {
               image: DecorationImage(
                 image: AssetImage(
                   isDarkMode
-                      ? 'assets/images/dark_bg.png'  // Dark mode background
-                      : 'assets/images/bg.png',      // Light mode background
+                      ? 'assets/images/dark_bg.png'
+                      : 'assets/images/bg.png',
                 ),
                 fit: BoxFit.cover,
               ),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.only(top: 0.0), // Space below the title
+            padding: const EdgeInsets.only(top: 0.0),
             child: RefreshIndicator(
               onRefresh: _onRefresh,
               child: SingleChildScrollView(
@@ -986,10 +962,8 @@ class _HomePageState extends State<HomePage> {
                   child: Column(
                     children: [
                       SizedBox(height: 20),
-                      // User Profile Section
                       _buildUserProfileSection(),
                       SizedBox(height: 10),
-                      // Graphs Section
                       _buildGraphsSection(),
                     ],
                   ),
@@ -1004,18 +978,21 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildUserProfileSection() {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    bool isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
+    bool isDarkMode = Provider
+        .of<ThemeProvider>(context)
+        .isDarkMode;
     return Container(
       padding: const EdgeInsets.all(20),
-      // Padding for the outer green container
       decoration: BoxDecoration(
         color: themeProvider.isDarkMode
-            ? Colors.white  // White background for dark mode
-            : Colors.green.shade800.withOpacity(0.8),  // Green background for light mode
+            ? Colors.white
+            : Colors.green.shade800.withOpacity(0.8),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: themeProvider.isDarkMode ? Colors.white.withOpacity(0.3) : Colors.grey.withOpacity(0.3),
+            color: themeProvider.isDarkMode
+                ? Colors.white.withOpacity(0.3)
+                : Colors.grey.withOpacity(0.3),
             spreadRadius: 2,
             blurRadius: 5,
             offset: Offset(0, 3),
@@ -1024,20 +1001,21 @@ class _HomePageState extends State<HomePage> {
       ),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 20.0),
-        // Padding for inner white container
         decoration: BoxDecoration(
           color: themeProvider.isDarkMode
-              ? Colors.black87 // Black background for dark mode
-              : Colors.white, // White background for light mode
-          borderRadius: BorderRadius.circular(15), // Rounded corners
+              ? Colors.black87
+              : Colors.white,
+          borderRadius: BorderRadius.circular(15),
         ),
         child: Row(
           children: [
             StreamBuilder<DocumentSnapshot>(
-              stream: FirebaseFirestore.instance
+              stream: FirebaseAuth.instance.currentUser != null
+                  ? FirebaseFirestore.instance
                   .collection('users')
-                  .doc(FirebaseAuth.instance.currentUser!.uid) // Fetch the logged-in user's document
-                  .snapshots(),
+                  .doc(FirebaseAuth.instance.currentUser!.uid)
+                  .snapshots()
+                  : null,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return CircularProgressIndicator();
@@ -1045,37 +1023,46 @@ class _HomePageState extends State<HomePage> {
                 if (snapshot.hasError) {
                   return Text('Error: ${snapshot.error}');
                 }
-                if (snapshot.hasData) {
-                  // Retrieve the document data as a Map
-                  Map<String, dynamic>? _userData = snapshot.data!.data() as Map<String, dynamic>?;
-
-                  // Debug log for the user data
-                  print('User document data: $_userData');
-
-                  // Retrieve profileIconIndex or use default and add +1
-                  int profileIconIndex = _userData != null && _userData['profileIconIndex'] != null
-                      ? (_userData['profileIconIndex'] as int) + 1
-                      : 1; // Default to 1 if profileIconIndex is null or missing
-
-                  // Debug log for the profileIconIndex
-                  print('Updated profileIconIndex (with +1): $profileIconIndex');
-
-                  return CircleAvatar(
-                    radius: 50,
-                    backgroundColor: Colors.grey[200], // Fallback background color
-                    backgroundImage: _userData != null &&
-                        _userData['profileImage'] != null &&
-                        _userData['profileImage'].isNotEmpty
-                        ? NetworkImage(_userData['profileImage']) // Display the uploaded image
-                        : AssetImage('assets/images/Icon$profileIconIndex.png') as ImageProvider, // Display the selected icon
-                    child: _userData != null &&
-                        _userData['profileImage'] != null &&
-                        _userData['profileImage'].isNotEmpty
-                        ? null // Do not display a child if the profile image is available
-                        : null, // No child if profileImage is null (AssetImage used instead)
-                  );
+                if (!snapshot.hasData || snapshot.data == null) {
+                  return Text('No user data found.');
                 }
-                return Text('No user data found.');
+
+                Map<String, dynamic>? _userData = snapshot.data!.data() as Map<
+                    String,
+                    dynamic>?;
+                int profileIconIndex = _userData != null &&
+                    _userData['profileIconIndex'] != null
+                    ? (_userData['profileIconIndex'] as int) + 1
+                    : 1;
+
+                double devicePixelRatio = MediaQuery
+                    .of(context)
+                    .devicePixelRatio;
+                double screenWidth = MediaQuery
+                    .of(context)
+                    .size
+                    .width;
+                double avatarRadius;
+
+                if (screenWidth <= 320 || devicePixelRatio < 2.0) {
+                  avatarRadius = 30.0;
+                } else if (screenWidth <= 480 || devicePixelRatio < 3.0) {
+                  avatarRadius = 40.0;
+                } else {
+                  avatarRadius = 50.0;
+                }
+
+                return CircleAvatar(
+                  radius: avatarRadius,
+                  backgroundColor: Colors.grey[200],
+                  backgroundImage: _userData != null &&
+                      _userData['profileImage'] != null &&
+                      _userData['profileImage'].isNotEmpty
+                      ? NetworkImage(_userData['profileImage'])
+                      : AssetImage(
+                      'assets/images/Icon$profileIconIndex.png') as ImageProvider,
+                  child: null,
+                );
               },
             ),
             SizedBox(width: 20),
@@ -1083,24 +1070,76 @@ class _HomePageState extends State<HomePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    "${_userData?.get('firstName') ?? 'First Name'} ${_userData
-                        ?.get('lastName') ?? 'Last Name'}",
-                    style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    "Student ID: ${_userData?.get('userID') ??
-                        'Not available'}",
-                    style: TextStyle(fontSize: 17),
-                  ),
-                  Text(
-                    "User Type: ${_userData?.get('userType') ??
-                        'Not available'}",
-                    style: TextStyle(fontSize: 17),
-                  ),
-                  Text(
-                    "Wallet: ₱ ${_userData?.get('wallet') ?? 'Not available'}",
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                  Builder(
+                    builder: (context) {
+                      double devicePixelRatio = MediaQuery
+                          .of(context)
+                          .devicePixelRatio;
+                      double screenWidth = MediaQuery
+                          .of(context)
+                          .size
+                          .width;
+                      double largeFontSize = (screenWidth <= 320 ||
+                          devicePixelRatio < 2.0) ? 15.0 : 20.0;
+                      double mediumFontSize = (screenWidth <= 320 ||
+                          devicePixelRatio < 2.0) ? 10.0 : 15.0;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "${_userData?.get('firstName') ??
+                                'First Name'} ${_userData?.get('lastName') ??
+                                'Last Name'}",
+                            style: TextStyle(fontSize: largeFontSize,
+                                fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            "Student ID: ${_userData?.get('userID') ??
+                                'Not available'}",
+                            style: TextStyle(fontSize: mediumFontSize),
+                          ),
+                          Text(
+                            "User Type: ${_userData?.get('userType') ??
+                                'Not available'}",
+                            style: TextStyle(fontSize: mediumFontSize),
+                          ),
+                          Text(
+                            "Wallet: ₱ ${_userData?.get('wallet') ??
+                                'Not available'}",
+                            style: TextStyle(fontSize: mediumFontSize,
+                                fontWeight: FontWeight.bold),
+                          ),
+                          Row(
+                            children: [
+                              Text(
+                                "Status: ",
+                                style: TextStyle(
+                                  fontSize: mediumFontSize,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDarkMode ? Colors.white : Colors
+                                      .black,
+                                ),
+                              ),
+                              Flexible(
+                                child: Text(
+                                  _userData?.get('loggedStatus') == false
+                                      ? 'Outside'
+                                      : 'Inside',
+                                  style: TextStyle(
+                                    fontSize: mediumFontSize,
+                                    fontWeight: FontWeight.bold,
+                                    color: _userData?.get('loggedStatus') ==
+                                        false ? Colors.red : Colors.green,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -1118,40 +1157,47 @@ class _HomePageState extends State<HomePage> {
     return Column(
       children: [
         GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => CountPerDayPage()),
-          ),
+          onTap: () =>
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => CountPerDayPage()),
+              ),
           child: _buildGraphContainer(
             title: 'CUSTOMER COUNT PER DAY',
-            painter: DayHeatmapPainter(isDarkMode: isDarkMode, dailyCounts: dailyCounts),
+            painter: DayHeatmapPainter(
+                isDarkMode: isDarkMode, dailyCounts: dailyCounts),
           ),
         ),
         GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => CountPerMonthPage()),
-          ),
+          onTap: () =>
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => CountPerMonthPage()),
+              ),
           child: _buildGraphContainer(
             title: 'CUSTOMER COUNT PER MONTH',
-            painter: MonthGraphPainter(isDarkMode: isDarkMode, monthlyCounts: monthlyCounts),
+            painter: MonthGraphPainter(
+                isDarkMode: isDarkMode, monthlyCounts: monthlyCounts),
           ),
         ),
         GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => IncomeAdminPage()),
-          ),
+          onTap: () =>
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => IncomeAdminPage()),
+              ),
           child: _buildGraphContainer(
             title: 'Monthly Income',
-            painter: IncomeBarPainter(isDarkMode: isDarkMode, totalIncome, monthlyIncome),
+            painter: IncomeBarPainter(
+                isDarkMode: isDarkMode, totalIncome, monthlyIncome),
           ),
         ),
         GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => UsersAdminPage()),
-          ),
+          onTap: () =>
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => UsersAdminPage()),
+              ),
           child: _buildGraphContainer(
             title: 'Users Chart',
             painter: ActiveUsersPainter(
@@ -1159,21 +1205,20 @@ class _HomePageState extends State<HomePage> {
               bannedUsersCount,
               totalUsersCount,
             ),
-            legend: _buildLegend(), // Pass the legend only for the Users Chart
+            legend: _buildLegend(),
           ),
         ),
       ],
     );
   }
 
-
   Widget _buildGraphContainer({
     required String title,
     required CustomPainter painter,
-    Widget? legend, // Optional parameter for the legend
+    Widget? legend,
   }) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    bool isDarkMode = themeProvider.isDarkMode; // Simplified for readability
+    bool isDarkMode = themeProvider.isDarkMode;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 8),
@@ -1183,7 +1228,9 @@ class _HomePageState extends State<HomePage> {
         borderRadius: BorderRadius.circular(15),
         boxShadow: [
           BoxShadow(
-            color: themeProvider.isDarkMode ? Colors.white.withOpacity(0.3) : Colors.grey.withOpacity(0.3),
+            color: themeProvider.isDarkMode
+                ? Colors.white.withOpacity(0.3)
+                : Colors.grey.withOpacity(0.3),
             spreadRadius: 2,
             blurRadius: 5,
             offset: Offset(0, 3),
@@ -1202,14 +1249,21 @@ class _HomePageState extends State<HomePage> {
           children: [
             Text(
               title,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              style: Theme
+                  .of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(
                 fontWeight: FontWeight.bold,
-                color: isDarkMode ? Colors.white : Colors.black, // Text color changes based on theme
+                color: isDarkMode ? Colors.white : Colors.black,
               ),
             ),
             const SizedBox(height: 10),
             CustomPaint(
-              size: Size(MediaQuery.of(context).size.width, 80),
+              size: Size(MediaQuery
+                  .of(context)
+                  .size
+                  .width, 80),
               painter: painter,
             ),
             if (legend != null) ...[
@@ -1221,7 +1275,6 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
-
 
   Widget _buildLegend() {
     return Row(
@@ -1242,10 +1295,10 @@ class _HomePageState extends State<HomePage> {
           height: 16,
           decoration: BoxDecoration(
             color: color,
-            borderRadius: BorderRadius.circular(4), // Slightly rounded box
+            borderRadius: BorderRadius.circular(4),
           ),
         ),
-        const SizedBox(width: 8), // Spacing between box and label
+        const SizedBox(width: 8),
         Text(
           label,
           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),

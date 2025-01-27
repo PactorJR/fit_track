@@ -10,7 +10,7 @@ class MemberBenefitsPage extends StatefulWidget {
 
 class _MemberBenefitsPageState extends State<MemberBenefitsPage> {
   final PageController _controller = PageController();
-  int _currentPage = 0;  // Track the current page index
+  int _currentPage = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -20,26 +20,26 @@ class _MemberBenefitsPageState extends State<MemberBenefitsPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // Background container
+
           Container(
             decoration: BoxDecoration(
               image: DecorationImage(
                 image: AssetImage(
                   isDarkMode
-                      ? 'assets/images/dark_bg.png' // Dark mode background
-                      : 'assets/images/bg.png',    // Light mode background
+                      ? 'assets/images/dark_bg.png'
+                      : 'assets/images/bg.png',
                 ),
                 fit: BoxFit.cover,
               ),
             ),
             child: Center(
-              // You can add more content here if needed
+
             ),
           ),
 
-          // PageView for the slides
+
           Positioned.fill(
-            top: 0, // Adjust the top position to place it below the title
+            top: 0,
             child: PageView(
               controller: _controller,
               onPageChanged: (index) {
@@ -82,7 +82,7 @@ class _MemberBenefitsPageState extends State<MemberBenefitsPage> {
             ),
           ),
 
-          // Top-left positioned op_img logo
+
           Positioned(
             bottom: 10,
             right: 10,
@@ -93,9 +93,9 @@ class _MemberBenefitsPageState extends State<MemberBenefitsPage> {
             ),
           ),
 
-          // SmoothPageIndicator at the bottom center
+
           Positioned(
-            bottom: 10,  // Adjust this value to move the indicator up or down
+            bottom: 10,
             left: 0,
             right: 0,
             child: Center(
@@ -112,15 +112,14 @@ class _MemberBenefitsPageState extends State<MemberBenefitsPage> {
             ),
           ),
 
-          // Positioned floating action button
           Positioned(
-            top: 60, // Adjust this value to move the button down
-            left: 16, // Horizontal position
+            top: 60,
+            left: 16,
             child: FloatingActionButton(
-              mini: true, // Smaller back button
+              mini: true,
               backgroundColor: isDarkMode ? Colors.grey : Colors.green,
               onPressed: () {
-                Navigator.of(context).pop(); // Navigate back to the previous screen
+                Navigator.of(context).pop();
               },
               child: Icon(Icons.arrow_back, color: Colors.white),
             ),
@@ -131,7 +130,6 @@ class _MemberBenefitsPageState extends State<MemberBenefitsPage> {
   }
 }
 
-// SlideWidget for each page in PageView
 class SlideWidget extends StatelessWidget {
   final String image;
   final String title;
@@ -142,17 +140,17 @@ class SlideWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Stack(
-      fit: StackFit.expand,  // Make the image fill the screen
+      fit: StackFit.expand,
       children: [
-        // Background image filling the page
+
         Image.asset(
           image,
-          fit: BoxFit.cover, // The image will cover the whole screen
+          fit: BoxFit.cover,
         ),
 
-        // Positioned text title on top of the image (bottom)
+
         Positioned(
-          bottom: 10,  // Adjust the position of the text
+          bottom: 10,
           left: 20,
           right: 20,
           child: Text(
@@ -161,8 +159,8 @@ class SlideWidget extends StatelessWidget {
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w500,
-              fontStyle: FontStyle.italic, // Makes the font italic
-              color: Colors.green, // White text color for better contrast
+              fontStyle: FontStyle.italic,
+              color: Colors.lightGreen,
             ),
           ),
         ),

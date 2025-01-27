@@ -1,3 +1,4 @@
+import 'package:fit_track/home_page.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -10,7 +11,10 @@ import 'member_benefits.dart';
 import 'theme_provider.dart';
 import 'package:provider/provider.dart';
 
+import 'alerts.dart';
+
 class MenuPage extends StatelessWidget {
+  final GlobalKey<AlertsPageState> alertsPageKey = GlobalKey<AlertsPageState>();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -28,69 +32,8 @@ class MenuPage extends StatelessWidget {
     return null;
   }
 
-  Future<void> _signOut(BuildContext context) async {
-    // Pass context here
-    final User? user = _auth.currentUser;
-    if (user != null) {
-      QuerySnapshot querySnapshot = await _firestore
-          .collection('logintime')
-          .where('userID', isEqualTo: user.uid)
-          .get();
-
-      if (querySnapshot.docs.isNotEmpty) {
-        DocumentSnapshot snapshot = querySnapshot.docs.first;
-        var data = snapshot.data() as Map<String, dynamic>?;
-
-        if (data != null) {
-          print("loggedOut value: ${data['loggedOut']}");
-
-          if (data['loggedOut'] == false) {
-            print("loggedOut is false, showing prompt");
-            _showLogoutPrompt(context); // Pass context here
-          } else {
-            print("loggedOut is true, proceeding to sign out");
-            _proceedToSignOut(context); // Pass context here
-          }
-        }
-      } else {
-        print("No document found for this user, proceeding to sign out");
-        _proceedToSignOut(context); // Pass context here
-      }
-    }
-  }
-
-  void _showLogoutPrompt(BuildContext context) {
-    // Accept context as parameter
-    showDialog(
-      context: context, // Use the passed context
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text("Scan Required"),
-          content: Text("You need to scan the QR code to logout."),
-          actions: <Widget>[
-            TextButton(
-              child: Text("Cancel"),
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-              },
-            ),
-            TextButton(
-              child: Text("Scan QR"),
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => ScanPage()),
-                );
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   Future<void> _proceedToSignOut(BuildContext context) async {
-    // Accept context as parameter
+
     try {
       await _auth.signOut();
       Navigator.of(context).pushReplacement(
@@ -117,23 +60,21 @@ class MenuPage extends StatelessWidget {
 
     return WillPopScope(
       onWillPop: () async {
-        return false; // Prevents the default back navigation.
+        return false;
       },
       child: Scaffold(
         body: Container(
           decoration: BoxDecoration(
             image: DecorationImage(
-              // Switch between background images based on the dark mode
               image: AssetImage(
                 isDarkMode
-                    ? 'assets/images/dark_bg.png' // Dark mode background
-                    : 'assets/images/bg.png',    // Light mode background
+                    ? 'assets/images/dark_bg.png'
+                    : 'assets/images/bg.png',
               ),
               fit: BoxFit.cover,
             ),
           ),
           child: FutureBuilder<Map<String, dynamic>?>(
-            // Fetch user data
             future: _fetchUserData(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
@@ -147,10 +88,9 @@ class MenuPage extends StatelessWidget {
 
                 return ListView(
                   children: [
-                    // User Profile Section
                     Container(
                       color: isDarkMode
-                          ? Colors.black38 // Dark mode container color
+                          ? Colors.black38
                           : Colors.green[700]?.withOpacity(0.9),
                       padding: EdgeInsets.all(16.0),
                       child: Column(
@@ -158,7 +98,7 @@ class MenuPage extends StatelessWidget {
                           StreamBuilder<DocumentSnapshot>(
                             stream: FirebaseFirestore.instance
                                 .collection('users')
-                                .doc(FirebaseAuth.instance.currentUser!.uid) // Fetch the logged-in user's document
+                                .doc(FirebaseAuth.instance.currentUser!.uid)
                                 .snapshots(),
                             builder: (context, snapshot) {
                               if (snapshot.connectionState == ConnectionState.waiting) {
@@ -168,33 +108,18 @@ class MenuPage extends StatelessWidget {
                                 return Text('Error: ${snapshot.error}');
                               }
                               if (snapshot.hasData) {
-                                // Retrieve the document data as a Map
                                 Map<String, dynamic>? _userData = snapshot.data!.data() as Map<String, dynamic>?;
 
-                                // Debug log for the user data
-                                print('User document data: $_userData');
-
-                                // Retrieve profileIconIndex or use default and add +1
                                 int profileIconIndex = _userData != null && _userData['profileIconIndex'] != null
                                     ? (_userData['profileIconIndex'] as int) + 1
-                                    : 1; // Default to 1 if profileIconIndex is null or missing
-
-                                // Debug log for the profileIconIndex
-                                print('Updated profileIconIndex (with +1): $profileIconIndex');
+                                    : 1;
 
                                 return CircleAvatar(
                                   radius: 50,
-                                  backgroundColor: Colors.grey[200], // Fallback background color
-                                  backgroundImage: _userData != null &&
-                                      _userData['profileImage'] != null &&
-                                      _userData['profileImage'].isNotEmpty
-                                      ? NetworkImage(_userData['profileImage']) // Display the uploaded image
-                                      : AssetImage('assets/images/Icon$profileIconIndex.png') as ImageProvider, // Display the selected icon
-                                  child: _userData != null &&
-                                      _userData['profileImage'] != null &&
-                                      _userData['profileImage'].isNotEmpty
-                                      ? null // Do not display a child if the profile image is available
-                                      : null, // No child if profileImage is null (AssetImage used instead)
+                                  backgroundColor: Colors.grey[200],
+                                  backgroundImage: _userData != null && _userData['profileImage'] != null && _userData['profileImage'].isNotEmpty
+                                      ? NetworkImage(_userData['profileImage'])
+                                      : AssetImage('assets/images/Icon$profileIconIndex.png') as ImageProvider,
                                 );
                               }
                               return Text('No user data found.');
@@ -221,12 +146,12 @@ class MenuPage extends StatelessWidget {
                             children: [
                               Icon(
                                 Icons.verified,
-                                color: isDarkMode ? Colors.white : Colors.amberAccent, // Keep amberAccent in both modes for visibility
+                                color: isDarkMode ? Colors.white : Colors.amberAccent,
                               ),
                               Text(
                                 "You are a member!",
                                 style: TextStyle(
-                                  color: isDarkMode ? Colors.white : Colors.amberAccent, // Keep amberAccent in both modes
+                                  color: isDarkMode ? Colors.white : Colors.amberAccent,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -246,10 +171,8 @@ class MenuPage extends StatelessWidget {
                                   );
                                 },
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor:
-                                  isDarkMode ? Colors.black38 : Colors.white,
-                                  foregroundColor:
-                                  isDarkMode ? Colors.white : Colors.green,
+                                  backgroundColor: isDarkMode ? Colors.black38 : Colors.white,
+                                  foregroundColor: isDarkMode ? Colors.white : Colors.green,
                                 ),
                                 child: Text("View Features"),
                               ),
@@ -260,39 +183,50 @@ class MenuPage extends StatelessWidget {
                       ),
                     ),
                     SizedBox(height: 20),
-                    // Menu Items Section
                     _buildMenuItem(
                       context,
                       icon: Icons.qr_code,
                       label: "Scan QR",
                       page: ScanPage(),
-                      isDarkMode: isDarkMode, // Pass the dark mode status
+                      isDarkMode: isDarkMode,
                     ),
                     _buildMenuItem(
                       context,
                       icon: Icons.attach_money,
                       label: "Cash-In",
                       page: CashInPage(),
-                      isDarkMode: isDarkMode, // Pass the dark mode status
+                      isDarkMode: isDarkMode,
+                    ),
+                    _buildMenuItem(
+                      context,
+                      icon: Icons.notifications,
+                      label: "Alerts",
+                      page: MyHomePage(title: 'History', selectedIndex: 1, docId: null, cameFromScanPage: true),
+                      isDarkMode: isDarkMode,
+                    ),
+                    _buildMenuItem(
+                      context,
+                      icon: Icons.history,
+                      label: "History",
+                      page: MyHomePage(title: 'History', selectedIndex: 2, docId: null, cameFromScanPage: true),
+                      isDarkMode: isDarkMode,
                     ),
                     _buildMenuItem(
                       context,
                       icon: Icons.person,
                       label: "Profile",
                       page: ProfilePage(),
-                      isDarkMode: isDarkMode, // Pass the dark mode status
+                      isDarkMode: isDarkMode,
                     ),
                     _buildMenuItem(
                       context,
                       icon: Icons.settings,
                       label: "Settings",
                       page: SettingsPage(
-                        isDarkMode: isDarkMode, // Pass dynamic dark mode status
-                        onThemeChanged: (bool isDarkMode) {
-                          // Handle theme change if needed
-                        },
+                        isDarkMode: isDarkMode,
+                        onThemeChanged: (bool isDarkMode) {},
                       ),
-                      isDarkMode: isDarkMode, // Pass the dark mode status
+                      isDarkMode: isDarkMode,
                     ),
                   ],
                 );
@@ -304,8 +238,6 @@ class MenuPage extends StatelessWidget {
     );
   }
 
-
-  // Helper method to build each menu item with dynamic theme-based colors
   Widget _buildMenuItem(BuildContext context, {
     required IconData icon,
     required String label,
@@ -313,40 +245,55 @@ class MenuPage extends StatelessWidget {
     required bool isDarkMode,
   }) {
     return GestureDetector(
-      child: Material(
-        color: Colors.transparent,  // Ensures background is transparent
-        elevation: 0,  // Shadow effect when pressed
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          decoration: BoxDecoration(
-            color: Colors.transparent, // Keeps the background transparent when not pressed
-            borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+
+        child: Card(
+          margin: const EdgeInsets.symmetric(vertical: 5),
+          color: isDarkMode ? Colors.grey.shade700 : Colors.green.shade700,
+
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(
+                15),
           ),
           child: InkWell(
             onTap: () async {
-              // Wait for animation to complete before navigating
-              await Future.delayed(const Duration(milliseconds: 100));  // Delay to allow animation to complete
+
+              await Future.delayed(const Duration(
+                  milliseconds: 100));
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => page),
+                MaterialPageRoute(builder: (
+                    context) => page),
               );
-            },  // GestureDetector handles the actual tap event
-            child: ListTile(
-              leading: Icon(
-                icon,
-                color: isDarkMode ? Colors.white : Colors.green, // Icon color based on dark mode
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+
+                borderRadius: BorderRadius.circular(
+                    15),
               ),
-              title: Text(
-                label,
-                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black), // Text color based on dark mode
-              ),
-              trailing: Icon(
-                Icons.arrow_forward_ios,
-                color: isDarkMode ? Colors.white : Colors.green[800], // Trailing icon color based on dark mode
+              child: ListTile(
+                leading: Icon(
+                  icon,
+                  color: isDarkMode ? Colors.white : Colors
+                      .white,
+                ),
+                title: Text(
+                  label,
+                  style: TextStyle(
+                    color: isDarkMode ? Colors.white : Colors
+                        .white,
+                  ),
+                ),
+                trailing: Icon(
+                  Icons.arrow_forward_ios,
+                  color: isDarkMode ? Colors.white : Colors
+                      .white,
+                ),
               ),
             ),
           ),
@@ -355,3 +302,4 @@ class MenuPage extends StatelessWidget {
     );
   }
 }
+

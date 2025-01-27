@@ -40,45 +40,46 @@ void main() async {
 
   runApp(MyApp(
     selectedIndex: payload == 'open_alerts' ? 1 : 0,
-    docId: null, // Default to null unless provided
+    docId: null,
   ));
 }
 
 class MyApp extends StatelessWidget {
   final int selectedIndex;
-  final String? docId; // Nullable docId parameter
+  final String? docId;
 
   const MyApp({super.key, this.selectedIndex = 0, this.docId});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      navigatorKey: navigatorKey,  // Pass navigatorKey to the MaterialApp
+      navigatorKey: navigatorKey,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
         useMaterial3: true,
       ),
       home: MyHomePage(
-        title: 'Admin Dashboard',
+        title: 'Home',
         selectedIndex: selectedIndex,
-        docId: docId, // Pass docId to MyAdminHomePage
+        docId: docId,
       ),
     );
   }
 }
 
-
 class MyHomePage extends StatefulWidget {
   const MyHomePage({
     super.key,
     required this.title,
-    this.selectedIndex = 0, // Default to the first tab
-    this.docId, // Optional transferable data
+    this.selectedIndex = 0,
+    this.docId,
+    this.cameFromScanPage = false,
   });
 
-  final String? docId; // Nullable docId for optional data transfer
+  final String? docId;
   final String title;
   final int selectedIndex;
+  final bool cameFromScanPage;
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
@@ -88,17 +89,17 @@ class _MyHomePageState extends State<MyHomePage> {
   final GlobalKey<AlertsPageState> alertsPageKey = GlobalKey<AlertsPageState>();
   late int _selectedBottomNavIndex;
   int _drawerIndex = -1;
-  late String _currentTitle;  // Initialize with a default title
+  late String _currentTitle;
   late bool _isDarkMode;
   final storage = FlutterSecureStorage();
   final User? user = FirebaseAuth.instance.currentUser;
   bool hasSnackbarShown = false;
-  Map<String, bool> alertSelection = {
-  }; // A map to track checkbox states for each alert
+  Map<String, bool> alertSelection = {};
   bool showActiveAlertsOnly = true;
   bool _rememberMe = false;
   late FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin;
   String? actualUserID;
+  late Timer _notificationTimer;
 
   final Map<int, String> _tabTitles = {
     0: 'Home',
@@ -114,52 +115,116 @@ class _MyHomePageState extends State<MyHomePage> {
     _selectedBottomNavIndex = widget.selectedIndex;
     _currentTitle = _tabTitles[_selectedBottomNavIndex] ?? 'Home';
     flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-    _checkUserNotificationStatus();  // Check if the user needs notifications
-    _checkRememberMe();
-    _getUserID();
+    _checkUserNotificationStatus();
+    _startNotificationStatusChecker();
     if (user != null) {
-      _showLoggedInSnackbar();
+      _showLoggedInSnackbar(cameFromScanPage: widget.cameFromScanPage);
     }
-
-    // If the title is 'Alerts', set the bottom navigation index to 1
     if (_currentTitle == 'Alerts') {
-      _onBottomNavTapped(1);  // Automatically select Alerts tab
+      _onBottomNavTapped(1);
     }
   }
 
+  @override
+  void dispose() {
+    _notificationTimer.cancel();
+    super.dispose();
+  }
+
+  void _startNotificationStatusChecker() {
+    _notificationTimer = Timer.periodic(Duration(minutes: 1), (timer) {
+      _checkUserNotificationStatus();
+      print("every 1 minute");
+    });
+  }
+
   Future<void> _checkUserNotificationStatus() async {
-    // Fetch all documents in the 'alerts' collection
-    final alertDocs = await FirebaseFirestore.instance
-        .collection('alerts')  // Assuming your collection is named 'alerts'
+    final currentUserID = FirebaseAuth.instance.currentUser?.uid;
+
+    if (currentUserID == null) {
+      print("No user is logged in");
+      return;
+    }
+
+    final userDocSnapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUserID)
         .get();
 
-    // Loop through each document in the collection
+    if (!userDocSnapshot.exists) {
+      print("User document not found");
+      return;
+    }
+
+    final userDoc = userDocSnapshot.data();
+    final actualUserID = userDoc?['userID'];
+
+    if (actualUserID == null) {
+      print("UserID not found in user document");
+      return;
+    }
+
+    final alertDocs = await FirebaseFirestore.instance
+        .collection('alerts')
+        .get();
+
     for (var alertDoc in alertDocs.docs) {
-      // Assuming each document has a map where each key is a userID
-      // and the value is the notification status (true/false)
       final userNotifications = alertDoc.data();
+      final alertTitle = userNotifications?['title'];
+      final actualUserIDField = userNotifications?[actualUserID];
+      final lastUpdatedField = 'lastUpdated$actualUserID';
+      final lastUpdatedCurrentUserIDField = userNotifications?[lastUpdatedField];
+      final durationField = 'duration$actualUserID';
 
-      // Check if the actualuserid field exists in the document
-      final actualUserIdField = userNotifications?[actualUserID];  // Replace with your actual user ID
+      int duration = 0;
+      if (alertTitle == "Stay Hydrated") {
+        duration = 1;
+      } else if (alertTitle == "Proper Form") {
+        duration = 2;
+      } else if (alertTitle == "Windows") {
+        duration = 3;
+      } else if (alertTitle == "CAYGO") {
+        duration = 4;
+      }
 
-      // If the value of the actualuserid is not true, proceed with the fetch
-      if (actualUserIdField != true) {
-        _fetchAlertsAndScheduleNotifications();  // Call the function only if the value is not true
-        break;  // Exit the loop after the first match
+      if (actualUserIDField == null || lastUpdatedCurrentUserIDField == null) {
+        await FirebaseFirestore.instance
+            .collection('alerts')
+            .doc(alertDoc.id)
+            .update({
+          actualUserID: false,
+          lastUpdatedField: FieldValue.serverTimestamp(),
+          durationField: duration,
+        });
+
+        _fetchAlertsAndScheduleNotifications();
+      } else {
+        if (actualUserIDField == true && lastUpdatedCurrentUserIDField != null) {
+          final currentTimestamp = DateTime.now();
+          final lastUpdatedTimestamp = (lastUpdatedCurrentUserIDField as Timestamp).toDate();
+          final difference = currentTimestamp.difference(lastUpdatedTimestamp);
+
+          if (difference.inMinutes > 1440) {
+            await FirebaseFirestore.instance
+                .collection('alerts')
+                .doc(alertDoc.id)
+                .update({
+              actualUserID: false,
+              lastUpdatedField: FieldValue.serverTimestamp(),
+            });
+
+            _fetchAlertsAndScheduleNotifications();
+          }
+        }
       }
     }
   }
 
-  // Cancel notification if the user logs out
   Future<void> cancelNotificationsOnLogout() async {
     print("User logged out, canceling scheduled notifications.");
-    // You can cancel notifications here
-    await flutterLocalNotificationsPlugin
-        .cancelAll(); // Cancel all notifications
+    await flutterLocalNotificationsPlugin.cancelAll();
   }
 
-
-  // Fetch the actual userID for the logged-in user
   Future<void> _getUserID() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
@@ -169,59 +234,8 @@ class _MyHomePageState extends State<MyHomePage> {
           .get();
 
       setState(() {
-        actualUserID =
-        userDoc.data()?['userID']; // Get the actual userID from the document
+        actualUserID = userDoc.data()?['userID'];
       });
-    }
-  }
-
-  Future<void> _initializeNotifications() async {
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const initializationSettings = InitializationSettings(android: androidSettings);
-
-    try {
-      await flutterLocalNotificationsPlugin.initialize(
-        initializationSettings,
-        onDidReceiveNotificationResponse: _onNotificationResponse,
-      );
-    } catch (e) {
-      debugPrint('Error initializing notifications: $e');
-    }
-  }
-
-  Future<void> _onNotificationResponse(NotificationResponse response) async {
-    debugPrint('Notification tapped with payload: ${response.payload}');
-
-    final Map<String, int> payloadActions = {
-      'open_alerts': 1,
-    };
-
-    int targetIndex = payloadActions[response.payload] ?? 0;
-    debugPrint('Navigating to Users Home with selectedIndex: $targetIndex');
-
-    // Check if the widget is still mounted before navigating
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => MyHomePage(
-            title: 'Alerts',
-            selectedIndex: targetIndex, // Ensure you pass the correct docId if needed
-          ),
-        ),
-      );
-    }
-  }
-
-
-
-  Future<void> _checkRememberMe() async {
-    String? value = await storage.read(key: 'isRemembered');
-    if (value == 'true') {
-      setState(() {
-        _rememberMe = true;
-      });
-      _fetchAlertsAndScheduleNotifications();
     }
   }
 
@@ -259,9 +273,10 @@ class _MyHomePageState extends State<MyHomePage> {
 
     for (var doc in alertsSnapshot.docs) {
       final alertData = doc.data();
-      final durationInMinutes = alertData['duration'];
-      final durationInSeconds = durationInMinutes * 60;
       final alertId = doc.id;
+      final durationField = 'duration$actualUserID';
+      final durationInMinutes = alertData[durationField] ?? 0;
+      final durationInSeconds = durationInMinutes * 60;
 
       if (alertData.containsKey(actualUserID)) {
         final userAlertStatus = alertData[actualUserID];
@@ -271,20 +286,11 @@ class _MyHomePageState extends State<MyHomePage> {
         } else {
           notifications.add(Future.delayed(Duration(seconds: durationInSeconds), () async {
             try {
-              // Update the alert document
               await FirebaseFirestore.instance.collection('alerts').doc(alertId).update({
                 actualUserID: true,
               });
 
-              // Pass the alertId to the notification method
               await _showAlertNotification(alertId, alertData['title'], alertData['desc']);
-
-              // Schedule reset after 2 hours
-              Future.delayed(Duration(hours: 2), () async {
-                await FirebaseFirestore.instance.collection('alerts').doc(alertId).update({
-                  actualUserID: false,
-                });
-              });
             } catch (e) {
               print("Error updating alert: $e");
             }
@@ -293,35 +299,33 @@ class _MyHomePageState extends State<MyHomePage> {
       }
     }
 
-    // Wait for all notifications to be scheduled
     await Future.wait(notifications);
   }
 
+
+
   Future<void> _showAlertNotification(String alertId, String title, String desc) async {
-    final largeIconPath = await _getCircularLargeIconPath(); // A method to get the circular image path
+    final largeIconPath = await _getCircularLargeIconPath();
 
     final androidDetails = AndroidNotificationDetails(
-      'alerts_channel', // Channel ID
-      'Alerts Notifications', // Channel Name
+      'alerts_channel',
+      'Alerts Notifications',
       icon: '@drawable/app_icon',
-      // Small icon resource from drawable (not circular)
       importance: Importance.high,
       priority: Priority.high,
       showWhen: true,
-      // Show the timestamp of the notification
       styleInformation: BigTextStyleInformation(
-        desc, // Expanded text content for "show more"
-        contentTitle: title, // Title in the expanded view
-        summaryText: 'Tap for more details', // Optional summary text
+        desc,
+        contentTitle: title,
+        summaryText: 'Tap for more details',
       ),
-      largeIcon: FilePathAndroidBitmap(
-          largeIconPath), // Set large circular image/icon
+      largeIcon: FilePathAndroidBitmap(largeIconPath),
     );
 
     final notificationDetails = NotificationDetails(android: androidDetails);
 
     await flutterLocalNotificationsPlugin.show(
-      alertId.hashCode, // Unique notification ID (hash of the alertId)
+      alertId.hashCode,
       title,
       desc,
       notificationDetails,
@@ -329,19 +333,11 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-
   Future<String> _getCircularLargeIconPath() async {
-    // Load image from assets
     final ByteData data = await rootBundle.load('assets/images/Icon_Notif.png');
     final Uint8List bytes = data.buffer.asUint8List();
-
-    // Decode to ui.Image
     final ui.Image image = await _loadImage(bytes);
-
-    // Convert to circular ui.Image
     final ui.Image circularImage = await _createCircularImage(image);
-
-    // Save and return file path
     final Directory tempDir = await getTemporaryDirectory();
     final File file = File('${tempDir.path}/Icon_Notif_Circular.png');
     await file.writeAsBytes(await _encodePng(circularImage));
@@ -362,11 +358,9 @@ class _MyHomePageState extends State<MyHomePage> {
         : sourceImage.height;
 
     final ui.PictureRecorder recorder = ui.PictureRecorder();
-    final Canvas canvas = Canvas(
-        recorder, Rect.fromLTWH(0, 0, size.toDouble(), size.toDouble()));
+    final Canvas canvas = Canvas(recorder, Rect.fromLTWH(0, 0, size.toDouble(), size.toDouble()));
 
-    final Paint paint = Paint()
-      ..isAntiAlias = true;
+    final Paint paint = Paint()..isAntiAlias = true;
     canvas.drawCircle(
       Offset(size / 2, size / 2),
       size / 2,
@@ -381,23 +375,17 @@ class _MyHomePageState extends State<MyHomePage> {
       paint,
     );
 
-    final ui.Image circularImage = await recorder.endRecording().toImage(
-        size, size);
+    final ui.Image circularImage = await recorder.endRecording().toImage(size, size);
     return circularImage;
   }
 
-
-// Encode the ui.Image into a PNG
   Future<Uint8List> _encodePng(ui.Image image) async {
-    final ByteData? byteData = await image.toByteData(
-        format: ui.ImageByteFormat.png);
+    final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     if (byteData == null) {
       throw Exception('Failed to convert image to PNG format');
     }
     return byteData.buffer.asUint8List();
   }
-
-
 
   void _toggleTheme(bool isDark) {
     setState(() {
@@ -405,51 +393,42 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  Future<void> _showLoggedInSnackbar() async {
-    if (user == null) {
-      return; // If the user is not logged in, do not show the snackbar
+  Future<void> _showLoggedInSnackbar({bool cameFromScanPage = false}) async {
+    if (user == null || cameFromScanPage) {
+      return;
     }
 
-    final userId = user!.uid; // Access uid only after confirming user is not null
+    final userId = user!.uid;
 
-    // Check if it's the first time logging in
     String? isFirstLogin = await storage.read(key: 'isFirstLogin');
-
-    // If it's the first time, skip showing the snackbar and mark it as already shown for session
     if (isFirstLogin == null || isFirstLogin == 'true') {
-      // Set isFirstLogin to false after the first login
       await storage.write(key: 'isFirstLogin', value: 'false');
-      return; // Skip snackbar for first-time login
+      return;
     }
 
-    // Check if the snackbar has already been shown in the current session
     if (hasSnackbarShown) {
-      return; // Skip showing the snackbar if already shown in this session
+      return;
     }
 
     String? rememberMeValue = await storage.read(key: 'isRemembered');
     if (rememberMeValue == 'true') {
-      // Fetch user details if rememberMe is true
       DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
       String firstName = userDoc['firstName'] ?? 'First Name';
       String lastName = userDoc['lastName'] ?? 'Last Name';
 
-      // Show Snackbar with user details
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("You're logged in as $firstName $lastName"),
-          behavior: SnackBarBehavior.floating, // Floating snackbar
+          content: Text("You're logged in the App as $firstName $lastName"),
+          behavior: SnackBarBehavior.floating,
           duration: Duration(seconds: 3),
         ),
       );
 
-      // Set the flag to true after showing the snackbar
       setState(() {
         hasSnackbarShown = true;
       });
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -458,7 +437,6 @@ class _MyHomePageState extends State<MyHomePage> {
     }
     final themeProvider = Provider.of<ThemeProvider>(context);
     bool isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
-
 
     final List<Widget> _bottomNavPages = [
       HomePage(),
@@ -479,21 +457,29 @@ class _MyHomePageState extends State<MyHomePage> {
         onThemeChanged: _toggleTheme,
       ),
     ];
+    double screenWidth = MediaQuery.of(context).size.width;
+    double screenHeight = MediaQuery.of(context).size.height;
+
+    double containerHeight;
+    double containerWidth;
+
+    double iconSize = screenWidth * 0.06;
+    double textSize = screenWidth * 0.02;
+    double bottomAppBarHeight = screenWidth * 0.18;
+
     return WillPopScope(
       onWillPop: () async {
-        return false;  // Prevent default back navigation
+        return false;
       },
       child: Scaffold(
         resizeToAvoidBottomInset: false,
         appBar: AppBar(
-          backgroundColor: isDarkMode ? Colors.black : Colors.green.shade200, // Change to white in dark mode
+          backgroundColor: isDarkMode ? Colors.black : Colors.green.shade200,
           automaticallyImplyLeading: false,
           title: Row(
             children: [
               Image.asset(
-                isDarkMode
-                    ? 'assets/images/FitTrack_Icon_Dark.png' // Dark mode image
-                    : 'assets/images/FitTrack_Icon.png',    // Light mode image
+                isDarkMode ? 'assets/images/FitTrack_Icon_Dark.png' : 'assets/images/FitTrack_Icon.png',
                 width: 40,
                 height: 40,
               ),
@@ -501,7 +487,8 @@ class _MyHomePageState extends State<MyHomePage> {
               Text(
                 _currentTitle,
                 style: TextStyle(
-                  color: isDarkMode ? Colors.green : Colors.black, // Change text color to black in dark mode
+                  fontFamily: 'Arial',
+                  color: isDarkMode ? Colors.green : Colors.white,
                 ),
               ),
             ],
@@ -511,6 +498,7 @@ class _MyHomePageState extends State<MyHomePage> {
             ? _bottomNavPages[_selectedBottomNavIndex]
             : _drawerPages[_drawerIndex],
         bottomNavigationBar: BottomAppBar(
+          height: bottomAppBarHeight,
           shape: const CircularNotchedRectangle(),
           notchMargin: 10,
           child: Padding(
@@ -518,42 +506,90 @@ class _MyHomePageState extends State<MyHomePage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                Expanded(
-                  child: IconButton(
-                    icon: Icon(Icons.home, size: 20),
-                    color: _selectedBottomNavIndex == 0 ? Colors.green : Colors.grey,
-                    onPressed: () {
-                      _onBottomNavTapped(0);
-                    },
-                  ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: () => _onBottomNavTapped(0),
+                      child: Icon(
+                        Icons.home,
+                        size: iconSize,
+                        color: _selectedBottomNavIndex == 0 ? Colors.green : Colors.grey,
+                      ),
+                    ),
+                    Text(
+                      'Home',
+                      style: TextStyle(
+                        color: _selectedBottomNavIndex == 0 ? Colors.green : Colors.grey,
+                        fontSize: textSize,
+                      ),
+                    ),
+                  ],
                 ),
-                Expanded(
-                  child: IconButton(
-                    icon: Icon(Icons.notifications, size: 20),
-                    color: _selectedBottomNavIndex == 1 ? Colors.green : Colors.grey,
-                    onPressed: () {
-                      _onBottomNavTapped(1);
-                    },
-                  ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: () => _onBottomNavTapped(1),
+                      child: Icon(
+                        Icons.notifications,
+                        size: iconSize,
+                        color: _selectedBottomNavIndex == 1 ? Colors.green : Colors.grey,
+                      ),
+                    ),
+                    Text(
+                      'Notifications',
+                      style: TextStyle(
+                        color: _selectedBottomNavIndex == 1 ? Colors.green : Colors.grey,
+                        fontSize: textSize,
+                      ),
+                    ),
+                  ],
                 ),
-                SizedBox(width: 40),  // Space for FAB
-                Expanded(
-                  child: IconButton(
-                    icon: Icon(Icons.history, size: 20),
-                    color: _selectedBottomNavIndex == 2 ? Colors.green : Colors.grey,
-                    onPressed: () {
-                      _onBottomNavTapped(2);
-                    },
-                  ),
+                SizedBox(width: 60),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: () => _onBottomNavTapped(2),
+                      child: Icon(
+                        Icons.history,
+                        size: iconSize,
+                        color: _selectedBottomNavIndex == 2 ? Colors.green : Colors.grey,
+                      ),
+                    ),
+                    Text(
+                      'History',
+                      style: TextStyle(
+                        color: _selectedBottomNavIndex == 2 ? Colors.green : Colors.grey,
+                        fontSize: textSize,
+                      ),
+                    ),
+                  ],
                 ),
-                Expanded(
-                  child: IconButton(
-                    icon: Icon(Icons.menu, size: 20),
-                    color: _selectedBottomNavIndex == 3 ? Colors.green : Colors.grey,
-                    onPressed: () {
-                      _onBottomNavTapped(3);
-                    },
-                  ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: () => _onBottomNavTapped(3),
+                      child: Icon(
+                        Icons.menu,
+                        size: iconSize,
+                        color: _selectedBottomNavIndex == 3 ? Colors.green : Colors.grey,
+                      ),
+                    ),
+                    Text(
+                      'Menu',
+                      style: TextStyle(
+                        color: _selectedBottomNavIndex == 3 ? Colors.green : Colors.grey,
+                        fontSize: textSize,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -573,7 +609,9 @@ class _MyHomePageState extends State<MyHomePage> {
             shape: const CircleBorder(),
             fillColor: Colors.white,
             child: Icon(
-                Icons.qr_code_scanner, size: 50, color: isDarkMode ? Colors.black : Colors.green.shade800, // Set color based on dark mode
+              Icons.qr_code_scanner,
+              size: 50,
+              color: isDarkMode ? Colors.black : Colors.green.shade800,
             ),
           ),
         ),
@@ -581,6 +619,7 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
     );
   }
+
 
   void _onBottomNavTapped(int index) {
     setState(() {
@@ -601,16 +640,17 @@ class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
   User? _user;
   DocumentSnapshot? _userData;
+  bool _isLoading = true;
 
   final imagePaths = [
-    'assets/images/image1.png',
-    'assets/images/image2.png',
-    'assets/images/image3.png',
-    'assets/images/image4.png',
+    'assets/images/image1.gif',
+    'assets/images/image2.gif',
+    'assets/images/image3.gif',
+    'assets/images/image4.gif',
   ];
 
   final imageDescriptions = [
-    "Don't forget to drink water",
+    "Stay Hydrated!",
     "Clean as you go",
     "Do proper form",
     "Close windows when done",
@@ -623,6 +663,22 @@ class _HomePageState extends State<HomePage> {
     if (_user != null) {
       _fetchUserData();
     }
+  }
+
+  Future<void> _fetchAllData() async {
+    setState(() => _isLoading = true);
+    _fetchUserData();
+    try {
+      await Future.wait([]);
+    } catch (e) {
+      print("Error fetching data: $e");
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _onRefresh() async {
+    await _fetchAllData();
   }
 
   Future<void> _fetchUserData() async {
@@ -647,14 +703,16 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    bool isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
+    bool isDarkMode = Provider
+        .of<ThemeProvider>(context)
+        .isDarkMode;
     final User? user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
       return Center(child: Text('No user logged in'));
     }
 
-    final userId = user.uid; // Use the actual userID
+    final userId = user.uid;
     return Stack(
       children: [
         Container(
@@ -662,232 +720,333 @@ class _HomePageState extends State<HomePage> {
             image: DecorationImage(
               image: AssetImage(
                 isDarkMode
-                    ? 'assets/images/dark_bg.png'  // Dark mode background
-                    : 'assets/images/bg.png',      // Light mode background
+                    ? 'assets/images/dark_bg.png'
+                    : 'assets/images/bg.png',
               ),
               fit: BoxFit.cover,
             ),
           ),
         ),
-        SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Column(
-              children: [
-                SizedBox(height: 20),
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 24.0),
-                  decoration: BoxDecoration(
-                    color: isDarkMode
-                        ? Colors.white // White background in dark mode
-                        : Colors.green.shade800.withOpacity(0.8), // Original color for light mode
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
-                        spreadRadius: 1,
-                        blurRadius: 5,
-                        offset: Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => ProfilePage()),
-                          );
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: isDarkMode ? Colors.black87 : Colors.green[100], // Black in dark mode, green in light mode
-                            borderRadius: BorderRadius.circular(10),
+        RefreshIndicator(
+          onRefresh: _onRefresh,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Center(
+                child: Column(
+                  children: [
+                    SizedBox(height: 20),
+                    Container(
+                      height: MediaQuery
+                          .of(context)
+                          .size
+                          .width <= 409 ? 190 : 215,
+                      width: MediaQuery
+                          .of(context)
+                          .size
+                          .width <= 409 ? 390 : 390,
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 20.0, horizontal: 24.0),
+                      decoration: BoxDecoration(
+                        color: isDarkMode
+                            ? Colors.white
+                            : Colors.green.shade800.withOpacity(0.8),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            spreadRadius: 1,
+                            blurRadius: 5,
+                            offset: Offset(0, 3),
                           ),
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              StreamBuilder<DocumentSnapshot>(
-                                stream: FirebaseFirestore.instance
-                                    .collection('users')
-                                    .doc(FirebaseAuth.instance.currentUser!.uid) // Fetch the logged-in user's document
-                                    .snapshots(),
-                                builder: (context, snapshot) {
-                                  if (snapshot.connectionState == ConnectionState.waiting) {
-                                    return CircularProgressIndicator();
-                                  }
-                                  if (snapshot.hasError) {
-                                    return Text('Error: ${snapshot.error}');
-                                  }
-                                  if (snapshot.hasData) {
-                                    // Retrieve the document data as a Map
-                                    Map<String, dynamic>? _userData = snapshot.data!.data() as Map<String, dynamic>?;
-
-                                    // Debug log for the user data
-
-                                    // Retrieve profileIconIndex or use default and add +1
-                                    int profileIconIndex = _userData != null && _userData['profileIconIndex'] != null
-                                        ? (_userData['profileIconIndex'] as int) + 1
-                                        : 1; // Default to 1 if profileIconIndex is null or missing
-
-                                    // Debug log for the profileIconIndex
-
-                                    return CircleAvatar(
-                                      radius: 50,
-                                      backgroundColor: Colors.grey[200], // Fallback background color
-                                      backgroundImage: _userData != null &&
-                                          _userData['profileImage'] != null &&
-                                          _userData['profileImage'].isNotEmpty
-                                          ? NetworkImage(_userData['profileImage']) // Display the uploaded image
-                                          : AssetImage('assets/images/Icon$profileIconIndex.png') as ImageProvider, // Display the selected icon
-                                      child: _userData != null &&
-                                          _userData['profileImage'] != null &&
-                                          _userData['profileImage'].isNotEmpty
-                                          ? null // Do not display a child if the profile image is available
-                                          : null, // No child if profileImage is null (AssetImage used instead)
-                                    );
-                                  }
-                                  return Text('No user data found.');
-                                },
-                              ),
-                              SizedBox(width: 20),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      "${_userData?.get('firstName') ?? 'First Name'} ${_userData?.get('lastName') ?? 'Last Name'}",
-                                      style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
-                                    ),
-                                    Text(
-                                      "User ID: ${_userData?.get('userID') ?? 'Not available'}",
-                                      style: TextStyle(fontSize: 17),
-                                    ),
-                                    Text(
-                                      "User Type: ${_userData?.get('userType') ?? 'Not available'}",
-                                      style: TextStyle(fontSize: 17),
-                                    ),
-                                    Text(
-                                      "Wallet: ₱ ${_userData?.get('wallet') ?? 'Not available'}",
-                                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-                SizedBox(height: 20), // Space between the containers
-                // New container 1 with images
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 24.0),
-                  decoration: BoxDecoration(
-                    color: isDarkMode ? Colors.black : Colors.green.shade800.withOpacity(0.8),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
-                        spreadRadius: 1,
-                        blurRadius: 5,
-                        offset: Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        "Always remember to..",
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w100),
-                        textAlign: TextAlign.center,
-                      ),
-                      SizedBox(height: 10),
-                      // Swipable PageView for images with text below each image
-                      SizedBox(
-                        height: 400,
-                        child: PageView.builder(
-                          controller: _pageController,
-                          itemCount: imagePaths.length,
-                          onPageChanged: (index) {
-                            setState(() {
-                              _currentIndex = index;
-                            });
-                          },
-                          itemBuilder: (context, index) {
-                            return Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                // Display image
-                                Image.asset(
-                                  imagePaths[index],
-                                  fit: BoxFit.cover, // Ensure the image fits well
-                                  height: 300, // You can adjust the height as needed
-                                ),
-                                SizedBox(height: 10),
-                                // Custom text below the image for each one
-                                Text(
-                                  imageDescriptions[index], // Use description based on index
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                      SizedBox(height: 10),
-                      // Dots indicator for the current page
-                      Row(
+                      child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(
-                          imagePaths.length,
-                              (index) => AnimatedContainer(
-                            duration: Duration(milliseconds: 300),
-                            margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                            height: 8,
-                            width: _currentIndex == index ? 16 : 8,
-                            decoration: BoxDecoration(
-                              color: _currentIndex == index
-                                  ? Colors.white
-                                  : Colors.white.withOpacity(0.5),
-                              borderRadius: BorderRadius.circular(4),
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (context) => ProfilePage()),
+                              );
+                            },
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: [
+                                  StreamBuilder<DocumentSnapshot>(
+                                    stream: FirebaseFirestore.instance
+                                        .collection('users')
+                                        .doc(
+                                        FirebaseAuth.instance.currentUser!.uid)
+                                        .snapshots(),
+                                    builder: (context, snapshot) {
+                                      if (snapshot.connectionState ==
+                                          ConnectionState.waiting) {
+                                        return CircularProgressIndicator();
+                                      }
+                                      if (snapshot.hasError) {
+                                        return Text('Error: ${snapshot.error}');
+                                      }
+                                      if (snapshot.hasData) {
+                                        Map<String,
+                                            dynamic>? _userData = snapshot.data!
+                                            .data() as Map<String, dynamic>?;
+
+                                        int profileIconIndex = _userData !=
+                                            null &&
+                                            _userData['profileIconIndex'] !=
+                                                null
+                                            ? (_userData['profileIconIndex'] as int) +
+                                            1
+                                            : 1;
+
+                                        double devicePixelRatio = MediaQuery
+                                            .of(context)
+                                            .devicePixelRatio;
+                                        double screenWidth = MediaQuery
+                                            .of(context)
+                                            .size
+                                            .width;
+                                        double avatarRadius;
+
+                                        if (screenWidth <= 409) {
+                                          avatarRadius = 30.0;
+                                        } else if (screenWidth >= 410) {
+                                          avatarRadius = 40.0;
+                                        } else {
+                                          avatarRadius = 50.0;
+                                        }
+
+                                        return CircleAvatar(
+                                          radius: avatarRadius,
+                                          backgroundColor: Colors.grey[200],
+                                          backgroundImage: _userData != null &&
+                                              _userData['profileImage'] !=
+                                                  null &&
+                                              _userData['profileImage']
+                                                  .isNotEmpty
+                                              ? NetworkImage(
+                                              _userData['profileImage'])
+                                              : AssetImage(
+                                              'assets/images/Icon$profileIconIndex.png') as ImageProvider,
+                                        );
+                                      }
+                                      return Text('No user data found.');
+                                    },
+                                  ),
+                                  SizedBox(width: 20),
+                                  SingleChildScrollView(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment
+                                          .start,
+                                      children: [
+                                        Builder(
+                                          builder: (context) {
+                                            double screenWidth = MediaQuery
+                                                .of(context)
+                                                .size
+                                                .width;
+                                            double firstNameFontSize = screenWidth <=
+                                                409 ? 24 : 30;
+                                            double otherFontSize = screenWidth <=
+                                                409 ? 14 : 17;
+
+                                            return Column(
+                                              crossAxisAlignment: CrossAxisAlignment
+                                                  .start,
+                                              children: [
+                                                Text(
+                                                  "${_userData?.get(
+                                                      'firstName') ??
+                                                      'First Name'} ${_userData
+                                                      ?.get('lastName') ??
+                                                      'Last Name'}",
+                                                  style: TextStyle(
+                                                    fontSize: firstNameFontSize,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.white,),
+                                                ),
+                                                Text(
+                                                  "User ID: ${_userData?.get(
+                                                      'userID') ??
+                                                      'Not available'}",
+                                                  style: TextStyle(
+                                                    fontSize: otherFontSize,
+                                                    color: Colors.white,),
+                                                ),
+                                                Text(
+                                                  "User Type: ${_userData?.get(
+                                                      'userType') ??
+                                                      'Not available'}",
+                                                  style: TextStyle(
+                                                    fontSize: otherFontSize,
+                                                    color: Colors.white,),
+                                                ),
+                                                Text(
+                                                  "Wallet: ₱ ${_userData?.get(
+                                                      'wallet') ??
+                                                      'Not available'}",
+                                                  style: TextStyle(
+                                                    fontSize: otherFontSize,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.white,),
+                                                ),
+                                                Row(
+                                                  children: [
+                                                    Text(
+                                                      "Status: ",
+                                                      style: TextStyle(
+                                                        fontSize: 17,
+                                                        fontWeight: FontWeight
+                                                            .bold,
+                                                        color: Colors.white,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      _userData?.get(
+                                                          'loggedStatus') ==
+                                                          false
+                                                          ? 'Outside'
+                                                          : 'Inside',
+                                                      style: TextStyle(
+                                                        fontSize: 17,
+                                                        fontWeight: FontWeight
+                                                            .bold,
+                                                        color: _userData?.get(
+                                                            'loggedStatus') ==
+                                                            false
+                                                            ? Colors.red
+                                                            : Colors.green,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            );
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
-                      SizedBox(height: 10),
-                    ],
-                  ),
+                    ),
+                    SizedBox(height: 20),
+                    Container(
+                      width: MediaQuery
+                          .of(context)
+                          .size
+                          .width <= 409 ? 390 : 390,
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 20.0, horizontal: 24.0),
+                      decoration: BoxDecoration(
+                        color: isDarkMode ? Colors.black : Colors.green.shade800
+                            .withOpacity(0.8),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            spreadRadius: 1,
+                            blurRadius: 5,
+                            offset: Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            "Always remember to..",
+                            style: TextStyle(color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.w100),
+                            textAlign: TextAlign.center,
+                          ),
+                          SizedBox(height: 10),
+                          SizedBox(
+                            height: MediaQuery
+                                .of(context)
+                                .size
+                                .width <= 409 ? 250 : 355,
+                            child: PageView.builder(
+                              controller: _pageController,
+                              itemCount: imagePaths.length,
+                              onPageChanged: (index) {
+                                _currentIndex = index;
+                                if (mounted) {
+                                  setState(() {
+                                    _currentIndex = index;
+                                  });
+                                }
+                              },
+                              itemBuilder: (context, index) {
+                                return Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Image.asset(
+                                      imagePaths[index],
+                                      fit: BoxFit.cover,
+                                      height: MediaQuery
+                                          .of(context)
+                                          .size
+                                          .width <= 409 ? 200 : 300,
+                                    ),
+                                    SizedBox(height: 10),
+                                    Text(
+                                      imageDescriptions[index],
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                          ),
+                          SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(
+                              imagePaths.length,
+                                  (index) =>
+                                  AnimatedContainer(
+                                    duration: Duration(milliseconds: 300),
+                                    margin: const EdgeInsets.symmetric(
+                                        horizontal: 4.0),
+                                    height: 8,
+                                    width: _currentIndex == index ? 16 : 8,
+                                    decoration: BoxDecoration(
+                                      color: _currentIndex == index
+                                          ? Colors.white
+                                          : Colors.white.withOpacity(0.5),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                  ),
+                            ),
+                          ),
+                          SizedBox(height: 10),
+                        ],
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                  ],
                 ),
-                SizedBox(height: 20), // Space between the containers
-                // New container 2
-              ],
+              ),
             ),
           ),
         ),
       ],
-    );
-  }
-
-  // Helper function to build image container
-  Widget _buildImageContainer(String imagePath) {
-    return Container(
-      margin: const EdgeInsets.all(4.0),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        image: DecorationImage(
-          image: AssetImage(imagePath),
-          fit: BoxFit.cover,
-        ),
-      ),
     );
   }
 }

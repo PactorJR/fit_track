@@ -40,73 +40,95 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
     return DateFormat('yyyy-MM-dd HH:mm:ss').format(dateTime);
   }
 
-  // Request permissions before accessing external storage
   Future<void> requestPermissions() async {
-    final status = await Permission.storage.request();
-    if (status.isGranted) {
-      // Proceed with downloading the file
+
+    if (await Permission.manageExternalStorage.request().isGranted) {
+
+      print("Storage permission granted");
     } else {
-      // Handle permission denial
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Permission denied')));
+
+      print("Storage permission denied");
     }
   }
 
   Future<void> _downloadEquipmentData() async {
     try {
-      print(selectedEquipId);
+      print("Starting to download equipment data...");
+
+
+      await requestPermissions();
+
+
+      print("Selected Equip ID: $selectedEquipId");
       if (selectedEquipId?.isNotEmpty ?? false) {
-        // Retrieve the equipment title from your data model based on the selected ID
+
         final equipmentTitle = await _getEquipmentTitleById(selectedEquipId);
-        print(equipmentTitle);
-        // Example: Prepare data for download
+        print("Equipment Title: $equipmentTitle");
+
+
         final equipmentData = "Equipment ID: $selectedEquipId\nName: $equipmentTitle";
 
-        // Generate the QR code from the equipment data
+
+        print("Generating QR code...");
         final qrCode = await _generateQRCode();
+        print("QR code generated successfully.");
 
-        // Custom directory path for internal storage
+
         String fitTrackPath = '/storage/emulated/0/FitTrack';
+        print("FitTrack path: $fitTrackPath");
 
-        // Create the FitTrack directory if it doesn't exist
+
         final fitTrackFolder = Directory(fitTrackPath);
         if (!await fitTrackFolder.exists()) {
+          print("FitTrack folder does not exist. Creating it...");
           await fitTrackFolder.create(recursive: true);
+        } else {
+          print("FitTrack folder already exists.");
         }
 
-        // Create the "QRCodes" subdirectory inside FitTrack
+
         final qrCodesFolder = Directory('$fitTrackPath/QRCodes');
         if (!await qrCodesFolder.exists()) {
+          print("QRCodes folder does not exist. Creating it...");
           await qrCodesFolder.create(recursive: true);
+        } else {
+          print("QRCodes folder already exists.");
         }
 
-        // Define the file path inside the "QRCodes" folder, including equipment title in the file name
+
         String filePath = '$fitTrackPath/QRCodes/${equipmentTitle}_QR.png';
+        print("File path for QR code: $filePath");
         final file = File(filePath);
 
-        // Write the QR code image to the file
-        await file.writeAsBytes(qrCode);
 
-        // Inform the user
+        print("Writing QR code to file...");
+        await file.writeAsBytes(qrCode);
+        print("QR code saved to $filePath");
+
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('QR Code saved: $filePath')),
         );
       } else {
+        print("No equipment item selected.");
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Please select an equipment item')),
         );
       }
     } catch (e) {
-      // Handle errors
-      print('Error downloading file: $e');
+
+      print("Error downloading file: $e");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to download file')),
       );
     }
   }
 
+
+
   Future<String> _getEquipmentTitleById(String? equipId) async {
     try {
-      // Simulating a database fetch using Firestore
+
       final doc = await FirebaseFirestore.instance.collection('equipments').doc(equipId).get();
 
       if (doc.exists) {
@@ -122,9 +144,9 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
 
   Future<Uint8List> _generateQRCode() async {
     try {
-      // Ensure selectedEquipId is valid
+
       if (selectedEquipId?.isNotEmpty ?? false) {
-        // Fetch the equipLink field from the selected equipment document
+
         final documentSnapshot = await FirebaseFirestore.instance
             .collection('equipments')
             .doc(selectedEquipId)
@@ -134,55 +156,55 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
           throw Exception('Selected equipment not found in the database');
         }
 
-        // Extract the equipLink field
+
         final equipLink = documentSnapshot.data()?['equipLink'] as String?;
         if (equipLink == null || equipLink.isEmpty) {
           throw Exception('equipLink field is missing or empty in the selected equipment document');
         }
 
-        // Create the QR code widget using equipLink as the data
+
         final qrValidationResult = QrCode.fromData(
           data: equipLink,
           errorCorrectLevel: QrErrorCorrectLevel.L,
         );
 
-        // Create an image from the QR code
+
         final qrPainter = QrPainter.withQr(
           qr: qrValidationResult,
           color: Colors.black,
           gapless: true,
         );
 
-        // Convert to ByteData
-        final picData = await qrPainter.toImageData(2048); // Use desired size (2048px)
+
+        final picData = await qrPainter.toImageData(2048);
         if (picData == null) {
           throw Exception('Failed to generate QR code image data');
         }
 
-        // Convert ByteData to Uint8List and add a white background
-        final image = await qrPainter.toImage(2048); // Convert to Image
+
+        final image = await qrPainter.toImage(2048);
         final width = image.width;
         final height = image.height;
 
-        // Create a white background canvas with the same size as the QR code
+
         final recorder = ui.PictureRecorder();
         final canvas = Canvas(
           recorder,
           Rect.fromPoints(Offset(0, 0), Offset(width.toDouble(), height.toDouble())),
         );
 
-        // Draw the white background
+
         canvas.drawColor(Colors.white, BlendMode.srcOver);
 
-        // Paint the QR code onto the canvas
+
         canvas.drawImage(image, Offset(0, 0), Paint());
 
-        // Finish the recording and convert it to a byte array
+
         final picture = recorder.endRecording();
         final img = await picture.toImage(width, height);
         final byteDataWithBg = await img.toByteData(format: ui.ImageByteFormat.png);
 
-        // Return the byte data of the image with white background
+
         return byteDataWithBg!.buffer.asUint8List();
       } else {
         throw Exception('No equipment selected');
@@ -354,29 +376,26 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
             ),
           ),
           Positioned(
-            top: 100,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.fitness_center,
-                    size: 24,
-                    color: isDarkMode ? Colors.white : Colors.green,
+            top: 40,
+            left: MediaQuery.of(context).size.width / 2 - 100,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.fitness_center,
+                  size: 24,
+                  color: isDarkMode ? Colors.white : Colors.green,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'Gym Equipment',
+                  style: TextStyle(
+                    color: isDarkMode ? Colors.white : Colors.black,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 24,
                   ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Gym Equipment',
-                    style: TextStyle(
-                      color: isDarkMode ? Colors.white : Colors.black,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 24,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           Center(
@@ -416,10 +435,12 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
                       ),
                       Container(
                         decoration: BoxDecoration(
-                          color: isDarkMode
-                              ? Colors.black38
-                              : Colors.green.withOpacity(0.8),
+                          color: isDarkMode ? Colors.black38 : Colors.white,
                           borderRadius: BorderRadius.circular(16.0),
+                          border: Border.all(
+                            color: Colors.black,
+                            width: 2.0,
+                          ),
                         ),
                         child: Padding(
                           padding: const EdgeInsets.all(8.0),
@@ -436,109 +457,118 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
                                 ),
                                 textAlign: TextAlign.center,
                               ),
-                              SizedBox(height: 8),
+                              SizedBox(height: 20),
+
                               SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: StreamBuilder<QuerySnapshot>(
-                                  stream: FirebaseFirestore.instance
-                                      .collection('equipments')
-                                      .snapshots(),
-                                  builder: (context, snapshot) {
-                                    if (snapshot.connectionState ==
-                                        ConnectionState.waiting) {
-                                      return Center(child: CircularProgressIndicator());
-                                    }
-                                    if (snapshot.hasError) {
-                                      return Center(
-                                          child: Text('Error: ${snapshot.error}'));
-                                    }
-                                    if (!snapshot.hasData ||
-                                        snapshot.data!.docs.isEmpty) {
-                                      return Center(
-                                          child: Text('No equipment found.'));
-                                    }
+                                scrollDirection: Axis.vertical,
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: StreamBuilder<QuerySnapshot>(
+                                    stream: FirebaseFirestore.instance
+                                        .collection('equipments')
+                                        .snapshots(),
+                                    builder: (context, snapshot) {
+                                      if (snapshot.connectionState ==
+                                          ConnectionState.waiting) {
+                                        return Center(child: CircularProgressIndicator());
+                                      }
+                                      if (snapshot.hasError) {
+                                        return Center(
+                                            child: Text('Error: ${snapshot.error}'));
+                                      }
+                                      if (!snapshot.hasData ||
+                                          snapshot.data!.docs.isEmpty) {
+                                        return Center(
+                                            child: Text('No equipment found.'));
+                                      }
 
-                                    var filteredDocs = snapshot.data!.docs.where((doc) {
-                                      var title =
-                                      (doc['equipTitle'] ?? '').toLowerCase();
-                                      return title.contains(searchTerm);
-                                    }).toList();
+                                      var filteredDocs = snapshot.data!.docs.where((doc) {
+                                        var title =
+                                        (doc['equipTitle'] ?? '').toLowerCase();
+                                        return title.contains(searchTerm);
+                                      }).toList();
 
-                                    if (filteredDocs.isEmpty) {
-                                      return Center(
-                                          child:
-                                          Text('No matching equipment found.'));
-                                    }
+                                      if (filteredDocs.isEmpty) {
+                                        return Center(
+                                            child: Text('No matching equipment found.'));
+                                      }
 
-                                    return Table(
-                                      border: TableBorder.all(),
-                                      columnWidths: {
-                                        0: FixedColumnWidth(150),
-                                        1: FixedColumnWidth(200),
-                                        2: FixedColumnWidth(100),
-                                        3: FixedColumnWidth(150),
-                                        4: FixedColumnWidth(80), // QR code column
-                                      },
-                                      children: [
-                                        TableRow(
-                                          children: [
-                                            _headerCell('Equipment Title'),
-                                            _headerCell('Equipment Link'),
-                                            _headerCell('ID'),
-                                            _headerCell('Timestamp'),
-                                            _headerCell('QR Code'),
-                                          ],
-                                        ),
-                                        ...filteredDocs.map((doc) {
-                                          return TableRow(
-                                            decoration: BoxDecoration(
-                                              color: selectedEquipId == doc.id
-                                                  ? Colors.white.withOpacity(0.8)
-                                                  : Colors.transparent,
-                                            ),
+                                      return Table(
+                                        border: TableBorder.all(),
+                                        columnWidths: {
+                                          0: FixedColumnWidth(120),
+                                          1: FixedColumnWidth(200),
+                                          2: FixedColumnWidth(100),
+                                          3: FixedColumnWidth(80),
+                                        },
+                                        children: [
+                                          TableRow(
                                             children: [
-                                              _tableCell(doc['equipTitle'] ?? '',
-                                                      () => _selectEquipment(doc.id)),
-                                              _tableCell(doc['equipLink'] ?? '',
-                                                      () => _selectEquipment(doc.id)),
-                                              _tableCell(doc.id,
-                                                      () => _selectEquipment(doc.id)),
-                                              _tableCell(
-                                                doc['timeStamp'] != null
-                                                    ? formatTimestamp(
-                                                    doc['timeStamp'])
-                                                    : '',
-                                                    () => _selectEquipment(doc.id),
-                                              ),
-                                              TableCell(
-                                                child: Padding(
-                                                  padding:
-                                                  const EdgeInsets.all(8.0),
-                                                  child: doc['equipLink'] != null
-                                                      ? QrImageView(
-                                                    data: doc['equipLink'],
-                                                    version: QrVersions.auto,
-                                                    size: 50.0,
-                                                  )
-                                                      : Text('No Link'),
-                                                ),
-                                              ),
+                                              _headerCell('Equipment Title'),
+                                              _headerCell('Equipment Link'),
+                                              _headerCell('Time Created'),
+                                              _headerCell('QR Code'),
                                             ],
-                                          );
-                                        }).toList(),
-                                      ],
-                                    );
-                                  },
+                                          ),
+                                          ...filteredDocs.map((doc) {
+                                            return TableRow(
+                                              decoration: BoxDecoration(
+                                                color: selectedEquipId == doc.id
+                                                    ? Colors.green.withOpacity(0.2)
+                                                    : Colors.transparent,
+                                              ),
+                                              children: [
+                                                TableCell(
+                                                  child: Center(
+                                                    child: _tableCell(doc['equipTitle'] ?? '', () => _selectEquipment(doc.id)),
+                                                  ),
+                                                ),
+                                                TableCell(
+                                                  child: Center(
+                                                    child: _tableCell(doc['equipLink'] ?? '', () => _selectEquipment(doc.id)),
+                                                  ),
+                                                ),
+                                                TableCell(
+                                                  child: Center(
+                                                    child: _tableCell(
+                                                      doc['timeStamp'] != null
+                                                          ? formatTimestamp(doc['timeStamp'])
+                                                          : '',
+                                                          () => _selectEquipment(doc.id),
+                                                    ),
+                                                  ),
+                                                ),
+                                                TableCell(
+                                                  child: Padding(
+                                                    padding: const EdgeInsets.all(0.0),
+                                                    child: doc['equipLink'] != null
+                                                        ? Center(
+                                                      child: QrImageView(
+                                                        data: doc['equipLink'],
+                                                        version: QrVersions.auto,
+                                                        size: 50.0,
+                                                      ),
+                                                    )
+                                                        : Center(child: Text('No Link')),
+                                                  ),
+                                                ),
+                                              ],
+                                            );
+                                          }).toList(),
+                                        ],
+                                      );
+                                    },
+                                  ),
                                 ),
                               ),
-                              SizedBox(height: 16),
+                              SizedBox(height: 20),
                               Row(
                                 children: [
                                   Expanded(
                                     child: _actionButton(
                                       onPressed: _createEquipment,
                                       icon: Icons.add,
-                                      label: '',
+                                      label: 'Create',
                                       color: Colors.green,
                                     ),
                                   ),
@@ -548,18 +578,17 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
                                           ? () => _editEquipment(context)
                                           : null,
                                       icon: Icons.edit,
-                                      label: '',
+                                      label: 'Edit',
                                       color: Colors.blue,
                                     ),
                                   ),
                                   Expanded(
                                     child: _actionButton(
                                       onPressed: selectedEquipId?.isNotEmpty ?? false
-                                          ? () =>
-                                          _showDeleteConfirmationDialog(context)
+                                          ? () => _showDeleteConfirmationDialog(context)
                                           : null,
                                       icon: Icons.delete,
-                                      label: '',
+                                      label: 'Delete',
                                       color: Colors.red,
                                     ),
                                   ),
@@ -569,7 +598,7 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
                                           ? _downloadEquipmentData
                                           : null,
                                       icon: Icons.download,
-                                      label: '',
+                                      label: 'Download',
                                       color: Colors.orange,
                                     ),
                                   ),
@@ -630,18 +659,50 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
     required String label,
     required Color color,
   }) {
+
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    bool isDarkMode = themeProvider.isDarkMode;
+
+
+    double screenWidth = MediaQuery.of(context).size.width;
+    double screenHeight = MediaQuery.of(context).size.height;
+
+
+    double buttonWidth = screenWidth < 360 ? screenWidth * 0.2 : screenWidth * 0.01;
+    double buttonHeight = screenHeight < 360 ? 10 : 10;
+
+
+    double fontSize = screenWidth < 360 ? 12 : 12;
+
+
+    EdgeInsetsGeometry padding = screenWidth < 360
+        ? EdgeInsets.symmetric(vertical: 0.2, horizontal: 0.4)
+        : EdgeInsets.symmetric(vertical: 0.8, horizontal: 1);
+
     return ElevatedButton(
       onPressed: onPressed,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      style: ElevatedButton.styleFrom(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24.0),
+        ),
+        padding: padding,
+        backgroundColor: isDarkMode ? Colors.white : Colors.white,
+        minimumSize: Size(buttonWidth, buttonHeight),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           Icon(icon, color: color),
-          SizedBox(width: 8),
-          Text(label, style: TextStyle(color: color)),
+          SizedBox(height: 5),
+          Text(label, style: TextStyle(color: color, fontSize: fontSize)),
         ],
       ),
     );
   }
+
+
+
+
 
   void _showDeleteConfirmationDialog(BuildContext context) {
     showDialog(
@@ -678,6 +739,7 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
     );
   }
 }
+
 class CreateEquipmentDialog extends StatefulWidget {
   @override
   _CreateEquipmentDialogState createState() => _CreateEquipmentDialogState();
@@ -686,7 +748,6 @@ class CreateEquipmentDialog extends StatefulWidget {
 class _CreateEquipmentDialogState extends State<CreateEquipmentDialog> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _linkController = TextEditingController();
-  final TextEditingController _timeStampController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
@@ -704,18 +765,6 @@ class _CreateEquipmentDialogState extends State<CreateEquipmentDialog> {
             TextField(
               controller: _linkController,
               decoration: InputDecoration(labelText: 'Equipment Link'),
-            ),
-            SizedBox(height: 8.0),
-            GestureDetector(
-              onTap: () {
-                _selectDateAndTime(context, _timeStampController);
-              },
-              child: AbsorbPointer(
-                child: TextField(
-                  controller: _timeStampController,
-                  decoration: InputDecoration(labelText: 'Timestamp'),
-                ),
-              ),
             ),
           ],
         ),
@@ -741,52 +790,26 @@ class _CreateEquipmentDialogState extends State<CreateEquipmentDialog> {
     );
   }
 
-  void _selectDateAndTime(BuildContext context, TextEditingController controller) async {
-    final DateTime? selectedDate = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(1900),
-      lastDate: DateTime(2100),
-    );
-
-    if (selectedDate != null) {
-      final TimeOfDay? selectedTime = await showTimePicker(
-        context: context,
-        initialTime: TimeOfDay.fromDateTime(DateTime.now()),
-      );
-
-      if (selectedTime != null) {
-        final DateTime combinedDateTime = DateTime(
-          selectedDate.year,
-          selectedDate.month,
-          selectedDate.day,
-          selectedTime.hour,
-          selectedTime.minute,
-        );
-
-        String formattedDateTime = "${combinedDateTime.toLocal().year.toString().padLeft(4, '0')}-${(combinedDateTime.month).toString().padLeft(2, '0')}-${(combinedDateTime.day).toString().padLeft(2, '0')} ${combinedDateTime.hour.toString().padLeft(2, '0')}:${combinedDateTime.minute.toString().padLeft(2, '0')}";
-        controller.text = formattedDateTime;
-      }
-    }
-  }
-
   void _saveEquipment() async {
     String title = _titleController.text.trim();
     String link = _linkController.text.trim();
-    String timeStampString = _timeStampController.text.trim();
-    DateTime? timeStampDateTime = DateTime.tryParse(timeStampString);
-    Timestamp timeStamp = timeStampDateTime != null
-        ? Timestamp.fromDate(timeStampDateTime)
-        : Timestamp.now();
 
-    if (title.isNotEmpty && link.isNotEmpty) {
-      await FirebaseFirestore.instance.collection('equipments').add({
-        'equipTitle': title,
-        'equipLink': link,
-        'timeStamp': timeStamp,
-      });
-
-      Navigator.of(context).pop();
+    // Ensure the link starts with "https://"
+    if (link.isNotEmpty && !link.startsWith('https://')) {
+      link = 'https://' + link;
     }
+
+
+  Timestamp timeStamp = Timestamp.now();
+
+  if (title.isNotEmpty && link.isNotEmpty) {
+  await FirebaseFirestore.instance.collection('equipments').add({
+  'equipTitle': title,
+  'equipLink': link,
+  'timeStamp': timeStamp,
+  });
+
+  Navigator.of(context).pop();
   }
+}
 }

@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:path/path.dart'; // For handling file paths
+import 'package:path/path.dart';
 
 
 void main() async {
@@ -39,17 +39,63 @@ class _ProfilePageState extends State<ProfilePage> {
   late User _user;
   DocumentSnapshot? _userData;
   int? _selectedIconIndex;
-  final ImagePicker _picker = ImagePicker();  // Declare ImagePicker instance
-  XFile? _image;  // Declare _image for storing picked image
+  final ImagePicker _picker = ImagePicker();
+  XFile? _image;
+  bool _isLoading = true;
+
+  Future<void> _fetchAllData() async {
+    setState(() => _isLoading = true);
+    _fetchUserData();
+    checkAndAddProfileImage();
+    try {
+      await Future.wait([
+      ]);
+    } catch (e) {
+      print("Error fetching data: $e");
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _onRefresh() async {
+    await _fetchAllData();
+  }
+
 
   @override
   void initState() {
     super.initState();
     _user = FirebaseAuth.instance.currentUser!;
-    _fetchUserData(); // Call the method to load the profile data
+    checkAndAddProfileImage();
+    _fetchUserData();
   }
 
-  // Fetch user profile data from Firestore and update the profileIconIndex
+  void checkAndAddProfileImage() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null) {
+      try {
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .get();
+
+
+        var userData = userDoc.data() as Map<String, dynamic>?;
+        if (userData == null || !userData.containsKey('profileImage')) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUser.uid)
+              .update({'profileImage': null});
+        }
+      } catch (e) {
+
+        print("Error checking/updating profile image: $e");
+      }
+    }
+  }
+
+
+
   Future<void> _fetchUserData() async {
     try {
       var snapshot = await FirebaseFirestore.instance
@@ -61,12 +107,11 @@ class _ProfilePageState extends State<ProfilePage> {
         _userData = snapshot;
         _selectedIconIndex = snapshot.data()?['profileIconIndex'] ?? 1;
 
-        // Convert age to String if it is an integer
         var age = snapshot.data()?['age'];
         if (age is int) {
           age = age.toString();
         }
-        _userData = snapshot; // Reassign to avoid type issues
+        _userData = snapshot;
       });
     } catch (e) {
       print('Error loading user profile: $e');
@@ -144,7 +189,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           onTap: () {
                             setState(() {
                               _selectedIconIndex = index;
-                              selectedImage = null; // Reset custom image preview
+                              selectedImage = null;
                             });
                           },
                           child: Container(
@@ -198,7 +243,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         );
                         if (selectedImage != null) {
                           setState(() {
-                            _selectedIconIndex = null; // Reset selected icon
+                            _selectedIconIndex = null;
                           });
                         }
                       },
@@ -216,7 +261,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 TextButton(
                   onPressed: () async {
-                    // Prepare updates map
                     Map<String, dynamic> updates = {
                       'firstName': firstNameController.text,
                       'lastName': lastNameController.text,
@@ -227,31 +271,29 @@ class _ProfilePageState extends State<ProfilePage> {
                     };
 
                     if (selectedImage != null) {
-                      // User has uploaded an image
                       File imageFile = File(selectedImage!.path);
-                      String filePath = 'userProfiles/${_user.uid}/${basename(selectedImage!.path)}';
+                      String filePath = 'userProfiles/${_user.uid}/${basename(
+                          selectedImage!.path)}';
                       TaskSnapshot uploadTask = await FirebaseStorage.instance
                           .ref(filePath)
                           .putFile(imageFile);
-                      String downloadURL = await uploadTask.ref.getDownloadURL();
+                      String downloadURL = await uploadTask.ref
+                          .getDownloadURL();
 
-                      // Update Firestore with the uploaded image
                       updates['profileImage'] = downloadURL;
-                      updates['profileIconIndex'] = 0; // Reset icon index
+                      updates['profileIconIndex'] = 0;
                     } else if (_selectedIconIndex != null) {
-                      // User has selected a profile icon
                       updates['profileIconIndex'] = _selectedIconIndex;
-                      updates['profileImage'] = null; // Clear image
+                      updates['profileImage'] = null;
                     }
 
-                    // Save updates to Firestore
                     await FirebaseFirestore.instance
                         .collection('users')
                         .doc(_user.uid)
                         .update(updates);
 
                     Navigator.of(context).pop();
-                    _fetchUserData(); // Refresh user data
+                    _fetchUserData();
                   },
                   child: Text('Save'),
                 ),
@@ -263,161 +305,173 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     bool isDarkMode = themeProvider.isDarkMode;
+    double screenWidth = MediaQuery.of(context).size.width;
+
     return Scaffold(
       body: Stack(
         children: [
-          // Background container
           Container(
             decoration: BoxDecoration(
               image: DecorationImage(
                 image: AssetImage(
                   isDarkMode
                       ? 'assets/images/dark_bg.png'
-                      : 'assets/images/bg.png', // Switch background image based on dark mode
+                      : 'assets/images/bg.png',
                 ),
                 fit: BoxFit.cover,
               ),
             ),
           ),
-          // Title at the top
           Positioned(
-            top: 80, // Adjust the top position as needed
-            left: MediaQuery
-                .of(context)
-                .size
-                .width / 2 - 50, // Center the title horizontally
+            top: 40,
+            left: MediaQuery.of(context).size.width / 2 - 50,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              // Center the content within the Row
               children: [
                 Icon(
                   Icons.person,
-                  size: 24, // Adjust the icon size as needed
-                  color: Provider.of<ThemeProvider>(context).isDarkMode ? Colors.white : Colors.green,
+                  size: screenWidth <= 409 ? 24 : 30,
+                  color: isDarkMode ? Colors.white : Colors.green,
                 ),
                 Text(
                   'Profile',
                   style: TextStyle(
                     color: isDarkMode ? Colors.white : Colors.black,
                     fontWeight: FontWeight.bold,
-                    fontSize: 24,
+                    fontSize: screenWidth <= 409 ? 20 : 24,
                   ),
                 ),
                 const SizedBox(width: 10),
-                // Adds space between the title and the icon
               ],
             ),
           ),
-          // Profile details container
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Container(
-                padding: EdgeInsets.all(16.0),
-                decoration: BoxDecoration(
-                  color: Provider.of<ThemeProvider>(context).isDarkMode
-                      ? Colors.black38
-                      : Colors.green.shade800,
-                  borderRadius: BorderRadius.circular(16.0),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Stack(
-                      children: [
-                        CircleAvatar(
-                          radius: 50,
-                          backgroundColor: Colors.grey[200], // Fallback background color
-                          backgroundImage: _image != null
-                              ? FileImage(File(_image!.path)) // Use FileImage for local file paths
-                              : (_userData?.get('profileImage') != null && _userData!.get('profileImage').isNotEmpty
-                              ? NetworkImage(_userData!.get('profileImage')) // Use NetworkImage for Firebase URL
-                              : AssetImage('assets/images/Icon${_selectedIconIndex != null ? _selectedIconIndex! + 1 : 1}.png') as ImageProvider),
-                          child: null, // No child, remove fallback icon
-                        ),
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: CircleAvatar(
-                            backgroundColor: Provider.of<ThemeProvider>(context).isDarkMode
-                                ? Colors.black
-                                : Colors.green.shade800,
-                            radius: 15,
-                            child: IconButton(
-                              icon: Icon(Icons.edit, size: 15, color: Colors.white),
-                              onPressed: () {
-                                _editProfile(context); // Trigger profile editing dialog
-                              },
-                            ),
+          Padding(
+            padding: const EdgeInsets.only(top: 200.0),
+            child: RefreshIndicator(
+              onRefresh: _onRefresh,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Container(
+                      padding: EdgeInsets.all(16.0),
+                      decoration: BoxDecoration(
+                        color: isDarkMode ? Colors.black : Colors.green.shade800
+                            .withOpacity(0.8),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            spreadRadius: 1,
+                            blurRadius: 5,
+                            offset: Offset(0, 3),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Stack(
+                            children: [
+                              CircleAvatar(
+                                radius: screenWidth <= 409 ? 30 : 40,
+                                backgroundColor: Colors.grey[200],
+                                backgroundImage: _image != null
+                                    ? FileImage(File(_image!.path))
+                                    : (_userData?.get('profileImage') != null &&
+                                    _userData!.get('profileImage').isNotEmpty
+                                    ? NetworkImage(_userData!.get(
+                                    'profileImage'))
+                                    : AssetImage(
+                                    'assets/images/Icon${_selectedIconIndex !=
+                                        null
+                                        ? _selectedIconIndex! + 1
+                                        : 1}.png') as ImageProvider),
+                                child: null,
+                              ),
+                              Positioned(
+                                bottom: screenWidth <= 409 ? 0 : 0,
+                                right: screenWidth <= 409 ? 0 : 0,
+                                child: CircleAvatar(
+                                  backgroundColor: isDarkMode
+                                      ? Colors.black
+                                      : Colors.green.shade800,
+                                  radius: screenWidth <= 409 ? 15 : 18,
+                                  child: IconButton(
+                                    icon: Icon(Icons.edit, size: screenWidth <= 409 ? 15 : 20,
+                                        color: Colors.white),
+                                    onPressed: () {
+                                      _editProfile(context);
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 20),
+                          ProfileItem(
+                            icon: Icons.person,
+                            label: 'First Name: ${_userData?.get('firstName') ??
+                                'Not available'}',
+                          ),
+                          SizedBox(height: screenWidth <= 409 ? 8 : 10),
+                          ProfileItem(
+                            icon: Icons.person_outline,
+                            label: 'Last Name: ${_userData?.get('lastName') ??
+                                'Not available'}',
+                          ),
+                          SizedBox(height: screenWidth <= 409 ? 8 : 10),
+                          ProfileItem(
+                            icon: Icons.email,
+                            label: 'Email: ${_userData?.get('email') ?? 'Not available'}',
+                          ),
+                          SizedBox(height: screenWidth <= 409 ? 8 : 10),
+                          ProfileItem(
+                            icon: Icons.phone,
+                            label: 'Mobile Number: ${_userData?.get('phone') ??
+                                'Not available'}',
+                          ),
+                          SizedBox(height: screenWidth <= 409 ? 8 : 10),
+                          ProfileItem(
+                            icon: Icons.cake,
+                            label: 'Birthday: ${_userData?.get('birthday') ?? 'Not available'}',
+                          ),
+                          SizedBox(height: screenWidth <= 409 ? 8 : 10),
+                          ProfileItem(
+                            icon: Icons.timer,
+                            label: 'Age: ${_userData?.get('age') ?? 'Not available'}',
+                          ),
+                          SizedBox(height: screenWidth <= 409 ? 60 : 80),
+                        ],
+                      ),
                     ),
-                    SizedBox(height: 20),
-                    ProfileItem(
-                      icon: Icons.person,
-                      label: 'First Name: ${_userData?.get('firstName') ??
-                          'Not available'}',
-                    ),
-                    SizedBox(height: 8.0),
-                    ProfileItem(
-                      icon: Icons.person_outline,
-                      label: 'Last Name: ${_userData?.get('lastName') ??
-                          'Not available'}',
-                    ),
-                    SizedBox(height: 8.0),
-                    ProfileItem(
-                      icon: Icons.email,
-                      label: 'E-mail: ${_userData?.get('email') ??
-                          'Not available'}',
-                    ),
-                    SizedBox(height: 8.0),
-                    ProfileItem(
-                      icon: Icons.phone,
-                      label: 'Mobile Number: ${_userData?.get('phone') ??
-                          'Not available'}',
-                    ),
-                    SizedBox(height: 8.0),
-                    ProfileItem(
-                      icon: Icons.cake,
-                      label: 'Age: ${_userData?.get('age') ?? 'Not available'}',
-                    ),
-                    SizedBox(height: 8.0),
-                    ProfileItem(
-                      icon: Icons.calendar_today,
-                      label: 'Birthday: ${_userData?.get('birthday') ??
-                          'Not available'}',
-                    ),
-                    SizedBox(height: 8.0),
-                    ProfileItem(
-                      icon: Icons.person_outline,
-                      label: 'User Type: ${_userData?.get('userType') ??
-                          'Not available'}',
-                    ),
-                    SizedBox(height: 8.0),
-                  ],
+                  ),
                 ),
               ),
             ),
           ),
-          // Floating back button positioned at the bottom
           Positioned(
-            top: 60, // Adjust this value to move the button down
-            left: 16, // Horizontal position
-            child: FloatingActionButton(
-              mini: true, // Smaller back button
-              backgroundColor: isDarkMode ? Colors.grey : Colors.green,
-              onPressed: () {
-                Navigator.of(context)
-                    .pop(); // Navigate back to the previous screen
-              },
-              child: Icon(Icons.arrow_back, color: Colors.white),
+            top: 20,
+            left: 16,
+            child: Padding(
+              padding: const EdgeInsets.all(6.0),
+              child: FloatingActionButton(
+                mini: true,
+                backgroundColor: Theme
+                    .of(context)
+                    .brightness == Brightness.dark
+                    ? Colors.grey
+                    : Colors.green,
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: Icon(Icons.arrow_back, color: Colors.white),
+              ),
             ),
           ),
         ],
@@ -438,17 +492,22 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+
+    double screenWidth = MediaQuery.of(context).size.width;
+    double otherFontSize = screenWidth <= 409 ? 15 : 20;
+    double iconSize = screenWidth <= 409 ? 15 : 20;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
         children: [
-          Icon(icon, color: Colors.white),
+          Icon(icon, color: Colors.white, size: iconSize),
           SizedBox(width: 10),
           Text(
             label,
             style: TextStyle(
               color: Colors.white,
-              fontSize: 16,
+              fontSize: otherFontSize,
             ),
           ),
         ],

@@ -53,7 +53,7 @@ class _RegisterPageState extends State<RegisterPage> {
   String errorMessage = '';
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
-  String? _selectedUserType; // Track selected user type
+  String? _selectedUserType;
 
   PlatformFile? _selectedFile;
 
@@ -66,14 +66,14 @@ class _RegisterPageState extends State<RegisterPage> {
     );
 
     if (selectedDate != null) {
-      final formattedDate = "${selectedDate.toLocal()}".split(' ')[0]; // Format as yyyy-mm-dd
+      final formattedDate = "${selectedDate.toLocal()}".split(' ')[0];
       _birthdayController.text = formattedDate;
     }
   }
   Future<void> _pickFile() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        withData: true, // Ensure the file's bytes are included
+        withData: true,
       );
 
       if (result != null && result.files.isNotEmpty) {
@@ -81,7 +81,7 @@ class _RegisterPageState extends State<RegisterPage> {
           _selectedFile = result.files.first;
         });
         print('File selected: ${_selectedFile!.name}, size: ${_selectedFile!.size}');
-        print('File bytes length: ${_selectedFile!.bytes?.length}'); // Check if the file has bytes
+        print('File bytes length: ${_selectedFile!.bytes?.length}');
       } else {
         print('No file selected');
         _selectedFile = null;
@@ -94,20 +94,20 @@ class _RegisterPageState extends State<RegisterPage> {
   Future<String?> _uploadFile(String userId) async {
 
     try {
-      // Add more logging to trace the issue
+
       print('Uploading file: ${_selectedFile!.name}');
       print('File bytes length: ${_selectedFile!.bytes?.length}');
 
       FirebaseStorage storage = FirebaseStorage.instance;
       Reference ref = storage.ref().child('enrollment_certificates/$userId/${_selectedFile!.name}');
 
-      // Check if file bytes are still null here
+
       if (_selectedFile!.bytes == null) {
         print('File bytes are null, cannot upload.');
         return null;
       }
 
-      UploadTask uploadTask = ref.putData(_selectedFile!.bytes!); // Upload the file bytes
+      UploadTask uploadTask = ref.putData(_selectedFile!.bytes!);
 
       TaskSnapshot snapshot = await uploadTask.whenComplete(() {});
       String downloadUrl = await snapshot.ref.getDownloadURL();
@@ -121,7 +121,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
   Future<void> register() async {
     setState(() {
-      _isLoading = true; // Show loading indicator
+      _isLoading = true;
     });
 
     if (_formKey.currentState?.validate() != true) {
@@ -158,7 +158,7 @@ class _RegisterPageState extends State<RegisterPage> {
           .get();
 
       if (existingUser.docs.isNotEmpty) {
-        // Show account exists dialog if found
+
         showDialog(
           context: context,
           builder: (BuildContext context) {
@@ -177,7 +177,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 ),
                 TextButton(
                   onPressed: () {
-                    Navigator.pop(context); // Close the dialog
+                    Navigator.pop(context);
                   },
                   child: const Text('Cancel'),
                 ),
@@ -199,7 +199,7 @@ class _RegisterPageState extends State<RegisterPage> {
         fileUrl = await _uploadFile(userCredential.user!.uid);
         if (fileUrl == null) {
           print('File upload failed or no file was uploaded.');
-          return; // Optionally return if file upload fails
+          return;
         }
       }
 
@@ -218,11 +218,12 @@ class _RegisterPageState extends State<RegisterPage> {
         'userStatus': 'On Approval',
         'lastLogin': 'N/A',
         if (fileUrl != null) 'certificateUrl': fileUrl,
-        'registerTime': FieldValue.serverTimestamp(), // Add register timestamp
+        'registerTime': FieldValue.serverTimestamp(),
         'seen': false,
+        'loggedStatus' : false,
       });
 
-      // Show success dialog after registration
+
       showDialog(
         context: context,
         builder: (BuildContext context) {
@@ -232,7 +233,7 @@ class _RegisterPageState extends State<RegisterPage> {
             actions: [
               TextButton(
                 onPressed: () {
-                  // Navigate to login page
+
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(builder: (context) => LoginPage()),
@@ -253,9 +254,9 @@ class _RegisterPageState extends State<RegisterPage> {
                   _phoneController.clear();
                   _userIDController.clear();
                   setState(() {
-                    _selectedUserType = null; // Clear selected user type
+                    _selectedUserType = null;
                   });
-                  Navigator.pop(context); // Close the dialog
+                  Navigator.pop(context);
                 },
                 child: const Text('Register Again'),
               ),
@@ -269,7 +270,7 @@ class _RegisterPageState extends State<RegisterPage> {
       });
     } finally {
       setState(() {
-        _isLoading = false; // Hide loading indicator
+        _isLoading = false;
       });
     }
   }
@@ -281,9 +282,9 @@ class _RegisterPageState extends State<RegisterPage> {
     _phoneController.addListener(() {
       if (_phoneController.text.isNotEmpty &&
           !_phoneController.text.startsWith('09')) {
-        // If the input does not start with '09', replace it with '09'
+
         _phoneController.text = '09' + _phoneController.text.replaceFirst(RegExp(r'^0+'), '');
-        _phoneController.selection = TextSelection.fromPosition(TextPosition(offset: _phoneController.text.length)); // Move the cursor to the end
+        _phoneController.selection = TextSelection.fromPosition(TextPosition(offset: _phoneController.text.length));
       }
     });
   }
@@ -291,11 +292,11 @@ class _RegisterPageState extends State<RegisterPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // Background image
+
           Positioned.fill(
             child: Image.asset(
-              'assets/images/bg.png', // Replace with your background image
-              fit: BoxFit.cover, // Adjust the image to cover the entire screen
+              'assets/images/bg.png',
+              fit: BoxFit.cover,
             ),
           ),
           SingleChildScrollView(
@@ -414,7 +415,23 @@ class _RegisterPageState extends State<RegisterPage> {
                         if (value == null || value.isEmpty) {
                           return 'Please enter your ID';
                         }
+                        if (!value.startsWith('20')) {
+                          return 'ID must start with "20"';
+                        }
+                        if (value.length > 9) {
+                          return 'ID must be a maximum of 9 characters';
+                        }
                         return null;
+                      },
+                      onChanged: (value) {
+
+                        if (!value.startsWith('20')) {
+                          _userIDController.text = '20' + value.replaceFirst(RegExp(r'^20'), '');
+                        }
+                        if (_userIDController.text.length > 9) {
+                          _userIDController.text = _userIDController.text.substring(0, 9);
+                        }
+                        _userIDController.selection = TextSelection.fromPosition(TextPosition(offset: _userIDController.text.length));
                       },
                     ),
                     const SizedBox(height: 10),
@@ -450,7 +467,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           .map<DropdownMenuItem<String>>((String value) {
                         return DropdownMenuItem<String>(
                           value: value,
-                          child: Text(value),
+                          child: Text(value, style: TextStyle(color: Colors.black,)),
                         );
                       }).toList(),
                       decoration: const InputDecoration(
@@ -522,6 +539,10 @@ class _RegisterPageState extends State<RegisterPage> {
                         if (value == null || value.isEmpty) {
                           return 'Please enter your password';
                         }
+
+                        if (!RegExp(r'^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>]).{8,}$').hasMatch(value)) {
+                          return 'Password must contain at least one uppercase letter, one number, and one symbol';
+                        }
                         return null;
                       },
                     ),
@@ -563,7 +584,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     const SizedBox(height: 10),
                     if (_isLoading)
                       Center(
-                        child: CircularProgressIndicator(), // Loading indicator
+                        child: CircularProgressIndicator(),
                       )
                     else
                     ElevatedButton(
@@ -573,22 +594,28 @@ class _RegisterPageState extends State<RegisterPage> {
                         }
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green, // Set background color to green
+                        backgroundColor: Colors.green,
                       ),
                       child: const Text(
                         'Register',
-                        style: TextStyle(color: Colors.white), // Set text color to white
+                        style: TextStyle(color: Colors.white),
                       ),
                     ),
                     const SizedBox(height: 10),
                     RichText(
                       text: TextSpan(
                         text: 'Already have an account? ',
-                        style: const TextStyle(color: Colors.black),
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontFamily: 'Arial',
+                        ),
                         children: [
                           TextSpan(
                             text: 'Log in',
-                            style: const TextStyle(color: Colors.blue),
+                            style: TextStyle(
+                              color: Colors.blue,
+                              fontFamily: 'Arial',
+                            ),
                             recognizer: TapGestureRecognizer()
                               ..onTap = () {
                                 Navigator.pushReplacement(
@@ -606,13 +633,13 @@ class _RegisterPageState extends State<RegisterPage> {
             ),
           ),
           Positioned(
-            top: 40, // Position the button at the top
-            left: 20, // Align to the left
+            top: 40,
+            left: 20,
             child: FloatingActionButton(
-              mini: true, // Smaller back button
+              mini: true,
               backgroundColor: Colors.green,
               onPressed: () {
-                Navigator.pop(context); // Navigate back to the previous screen
+                Navigator.pop(context);
               },
               child: Icon(Icons.arrow_back, color: Colors.white),
             ),

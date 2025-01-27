@@ -28,9 +28,9 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
   String? selectedUserId;
   TextEditingController searchController = TextEditingController();
   DateTime? startDate;
-  DateTime? endDate; // Store the selected date
-  String? selectedDay; // To hold the selected day for filtering
-  bool hasDataForSelectedDay = true; // Add this to your state
+  DateTime? endDate;
+  String? selectedDay;
+  bool hasDataForSelectedDay = true;
   List<DocumentSnapshot> filteredDocs = [];
 
   bool seen = false;
@@ -71,17 +71,15 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
   }
 
   Future<DateTime?> _selectDate(BuildContext context, {DateTime? initialDate}) async {
-    // If no date is provided, set initialDate to today's date
     DateTime initial = initialDate ?? DateTime.now();
 
     return await showDatePicker(
       context: context,
-      initialDate: initial, // Use provided initialDate or default to today
+      initialDate: initial,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
   }
-
 
   String formatTimestamp(Timestamp timestamp) {
     DateTime dateTime = timestamp.toDate();
@@ -91,72 +89,55 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
   bool filterByDay(String documentDay, Timestamp scannedTime, String documentType) {
     DateTime logDate = scannedTime.toDate();
 
-    // Check if the selectedDay is "All"
     if (selectedDay != null && selectedDay!.toLowerCase() == "all") {
-      // Show only documents with the field "type" equal to "login"
       return documentType.toLowerCase() == "login";
     }
 
-    // Check if the startDate is chosen but the endDate is not selected
     if (startDate != null && endDate == null) {
-      // Display message or handle the logic accordingly
       print("Waiting for End date to be chosen...");
-      return false; // Optionally, you could return false to not display any logs during this period
+      return false;
     }
 
-    // Filter by date range: Only show logs within the range
     if (startDate != null && endDate != null) {
       bool withinRange = !logDate.isBefore(startDate!) && !logDate.isAfter(endDate!);
       if (!withinRange) {
-        return false; // Exclude logs outside the date range
+        return false;
       }
     }
 
-    // If no date range filter is applied, fallback to filtering by specific day
     if (selectedDay != null && selectedDay!.isNotEmpty) {
       return documentDay.toLowerCase() == selectedDay!.toLowerCase();
     }
 
-    // Default: Show all if no filters are applied
     return true;
   }
 
-
   @override
   Future<String> generateReport(List<DocumentSnapshot> filteredDocs) async {
-    // Request permissions for storage
     await _requestPermissions();
 
-    // Get the current date and time for the file name
     String currentDateTime = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
 
-    // Define the path to external storage (e.g., "/storage/emulated/0/FitTrack/CountDay")
     String fitTrackPath = '/storage/emulated/0/FitTrack';
     String countDayPath = '$fitTrackPath/CountDay';
 
-    // Create the FitTrack directory if it doesn't exist
     final fitTrackFolder = Directory(fitTrackPath);
     if (!await fitTrackFolder.exists()) {
       await fitTrackFolder.create(recursive: true);
     }
 
-    // Create the CountDay directory if it doesn't exist
     final countDayFolder = Directory(countDayPath);
     if (!await countDayFolder.exists()) {
       await countDayFolder.create(recursive: true);
     }
 
-    // Define the file path inside the CountDay folder with the current date and time
     String filePath = '$countDayPath/report_$currentDateTime.txt';
 
-    // Initialize a list to store the content for the report (name, time, day, userId)
     String reportContent = 'Users Information Report - $currentDateTime\n\n';
     reportContent += 'Name, Time, Day, User ID\n';
 
-    // Map to count users for each day
     Map<String, int> dayCounts = {};
 
-    // Loop through filteredDocs to build the report
     for (var doc in filteredDocs) {
       String name = '${doc['firstName']} ${doc['lastName'] ?? ''}';
       String time = doc['scannedTime'] != null && doc['scannedTime'] is Timestamp
@@ -165,37 +146,29 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
       String day = doc['day'] ?? 'Unknown';
       String userId = doc['userID']?.toString() ?? 'N/A';
 
-      // Increment the count for the day
       if (!dayCounts.containsKey(day)) {
         dayCounts[day] = 0;
       }
       dayCounts[day] = dayCounts[day]! + 1;
 
-      // Add the row data for each document
       reportContent += '$name, $time, $day, $userId\n';
     }
 
-    // Add a summary section for user counts per day
     reportContent += '\nSummary of Users per Day:\n';
     dayCounts.forEach((day, count) {
       reportContent += '$day: $count\n';
     });
 
-    // Create the file and write the report content
     File file = File(filePath);
     await file.writeAsString(reportContent);
 
-    // Return the file path after saving the report
     return filePath;
   }
 
   Future<void> _requestPermissions() async {
-    // Request permission to access storage
     if (await Permission.manageExternalStorage.request().isGranted) {
-      // Permission granted
       print("Storage permission granted");
     } else {
-      // Permission denied
       print("Storage permission denied");
     }
   }
@@ -206,21 +179,18 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // Background image
           Container(
             decoration: BoxDecoration(
               image: DecorationImage(
-                // Switch between background images based on the dark mode
                 image: AssetImage(
                   themeProvider.isDarkMode
-                      ? 'assets/images/dark_bg.png' // Dark mode background
-                      : 'assets/images/bg.png',    // Light mode background
+                      ? 'assets/images/dark_bg.png'
+                      : 'assets/images/bg.png',
                 ),
                 fit: BoxFit.cover,
               ),
             ),
           ),
-          // Title at the top
           Positioned(
             top: 60,
             left: 0,
@@ -247,8 +217,6 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
               ),
             ),
           ),
-
-          // Centered content
           Center(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -258,9 +226,14 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
+                      height: 600,
                       decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.8),
+                        color: isDarkMode ? Colors.black38 : Colors.white,
                         borderRadius: BorderRadius.circular(16.0),
+                        border: Border.all(
+                          color: Colors.black,
+                          width: 2.0,
+                        ),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(8.0),
@@ -272,61 +245,60 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
                               style: TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                                color: isDarkMode ? Colors.white : Colors.black,
                               ),
                               textAlign: TextAlign.center,
                             ),
                             SizedBox(height: 8),
-
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                // Filter dropdown with icon on the left
                                 Row(
                                   children: [
-                                    Icon(Icons.filter_list, color: Colors.white), // Filter icon
-                                    SizedBox(width: 8), // Space between the icon and dropdown
+                                    Icon(Icons.filter_list, color: Colors.white),
+                                    SizedBox(width: 8),
                                     DropdownButton<String>(
                                       value: selectedDay,
-                                      hint: Text('Select Day', style: TextStyle(color: Colors.white)),
-                                      icon: Icon(Icons.arrow_drop_down, color: Colors.white), // Dropdown arrow
+                                      hint: Text('Select Day', style: TextStyle(color: isDarkMode ? Colors.white : Colors.black)),
+                                      icon: Icon(Icons.arrow_drop_down, color: isDarkMode ? Colors.white : Colors.black),
                                       onChanged: (String? newValue) {
                                         setState(() {
                                           selectedDay = newValue;
                                         });
                                       },
                                       items: <String>[
-                                        'All', // Add "All" option here
+                                        'All',
                                         'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
                                       ].map<DropdownMenuItem<String>>((String value) {
                                         return DropdownMenuItem<String>(
                                           value: value,
-                                          child: Text(value, style: TextStyle(color: Colors.black)),
+                                          child: Text(value, style: TextStyle(color: isDarkMode ? Colors.white : Colors.black)),
                                         );
                                       }).toList(),
                                     ),
                                   ],
                                 ),
-                                SizedBox(width: 20), // Space between dropdown and next element
+
+                                SizedBox(width: 20),
                                 GestureDetector(
                                   onTap: () async {
-                                    DateTime? pickedDate = await _selectDate(context, initialDate: startDate);  // Pass startDate as the initial date
+                                    DateTime? pickedDate = await _selectDate(context, initialDate: startDate);
                                     if (pickedDate != null) {
                                       setState(() {
-                                        startDate = pickedDate; // Update only the start date
+                                        startDate = pickedDate;
                                       });
                                     }
                                   },
                                   child: Row(
                                     children: [
-                                      Icon(Icons.calendar_today, color: Colors.white),
+                                      Icon(Icons.calendar_today, color: isDarkMode ? Colors.white : Colors.black),
                                       SizedBox(width: 8),
                                       Text(
                                         startDate == null
                                             ? 'Start'
-                                            : DateFormat('MM-dd').format(startDate!), // Display selected start date
+                                            : DateFormat('MM-dd').format(startDate!),
                                         style: TextStyle(
-                                          color: Colors.white,
+                                          color: isDarkMode ? Colors.white : Colors.black,
                                           fontSize: 16,
                                         ),
                                       ),
@@ -338,40 +310,43 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
 
                                 GestureDetector(
                                   onTap: () async {
-                                    DateTime? pickedDate = await _selectDate(context, initialDate: endDate);  // Pass endDate as the initial date
+                                    DateTime? pickedDate = await _selectDate(context, initialDate: endDate);
                                     if (pickedDate != null) {
                                       setState(() {
-                                        endDate = pickedDate; // Update only the end date
+                                        endDate = pickedDate;
                                       });
                                     }
                                   },
                                   child: Row(
                                     children: [
-                                      Icon(Icons.calendar_today, color: Colors.white),
+                                      Icon(Icons.calendar_today, color: isDarkMode ? Colors.white : Colors.black),
                                       SizedBox(width: 8),
                                       Text(
                                         endDate == null
                                             ? 'End'
-                                            : DateFormat('MM-dd').format(endDate!), // Display selected end date
+                                            : DateFormat('MM-dd').format(endDate!),
                                         style: TextStyle(
-                                          color: Colors.white,
+                                          color: isDarkMode ? Colors.white : Colors.black,
                                           fontSize: 16,
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
-                                SizedBox(width: 8), // Space after the end date
+                                SizedBox(width: 8),
                               ],
                             ),
                             SizedBox(height: 8),
 
-                            SingleChildScrollView(
+                        Expanded(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.vertical,
+                            child: SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
                               child: StreamBuilder<QuerySnapshot>(
                                 stream: FirebaseFirestore.instance
                                     .collection('loghistory')
-                                    .where('type', isEqualTo: 'login') // Filter for type: "login"
+                                    .where('type', isEqualTo: 'login')
                                     .snapshots(),
                                 builder: (context, snapshot) {
                                   if (snapshot.connectionState == ConnectionState.waiting) {
@@ -384,28 +359,27 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
                                     return Center(child: Text('No users found.'));
                                   }
 
-                                  // Compute filteredDocs based on the current filter criteria
+
                                   List<DocumentSnapshot> localFilteredDocs = snapshot.data!.docs.where((doc) {
                                     if (doc['scannedTime'] == null || !(doc['scannedTime'] is Timestamp)) {
                                       return false;
                                     }
                                     if (doc['type'] == null || doc['type'] is! String) {
-                                      return false; // Ensure the "type" field exists and is a String
+                                      return false;
                                     }
                                     return filterByDay(
-                                      doc['day'] ?? '',                   // documentDay
-                                      doc['scannedTime'] as Timestamp,    // scannedTime
-                                      doc['type'] as String,              // documentType
+                                      doc['day'] ?? '',
+                                      doc['scannedTime'] as Timestamp,
+                                      doc['type'] as String,
                                     );
                                   }).toList();
 
 
-                                  // Update the filteredDocs only if the localFilteredDocs has changed
+
                                   if (filteredDocs != localFilteredDocs) {
-                                    filteredDocs = localFilteredDocs; // Update state only when necessary
+                                    filteredDocs = localFilteredDocs;
                                   }
 
-                                  // Check if there are documents for the selected day
                                   bool hasDataForSelectedDay = filteredDocs.isNotEmpty;
 
                                   if (startDate != null && endDate == null) {
@@ -495,6 +469,8 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
                                 },
                               ),
                             ),
+                          ),
+                        ),
                             SizedBox(height: 16),
                             Padding(
                               padding: const EdgeInsets.only(top: 0.0),
@@ -503,25 +479,25 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
                                 children: [
                                   ElevatedButton(
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.white, // Set button background to white
+                                      backgroundColor: Colors.white,
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16.0), // Rounded corners
+                                        borderRadius: BorderRadius.circular(16.0),
                                       ),
-                                      side: BorderSide(color: Colors.green), // Add a green border
-                                      elevation: 0, // Remove button shadow
+                                      side: BorderSide(color: Colors.green),
+                                      elevation: 0,
                                     ),
                                     onPressed: () async {
                                       if (filteredDocs.isNotEmpty) {
-                                        // Show a loading dialog while generating the report
+
                                         showDialog(
                                           context: context,
-                                          barrierDismissible: false, // Prevent dismissal
+                                          barrierDismissible: false,
                                           builder: (BuildContext context) {
                                             return AlertDialog(
                                               title: Text("Generating Report"),
                                               content: Row(
                                                 children: [
-                                                  CircularProgressIndicator(), // Show a loading spinner
+                                                  CircularProgressIndicator(),
                                                   SizedBox(width: 16),
                                                   Expanded(child: Text("Please wait while the report is being generated...")),
                                                 ],
@@ -530,13 +506,12 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
                                           },
                                         );
 
-                                        // Generate the report
+
                                         String filePath = await generateReport(filteredDocs);
 
-                                        // Close the loading dialog
+
                                         Navigator.of(context).pop();
 
-                                        // Show a success dialog with the file location
                                         showDialog(
                                           context: context,
                                           builder: (BuildContext context) {
@@ -555,7 +530,7 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
                                           },
                                         );
                                       } else {
-                                        // Show an error dialog if there are no documents
+
                                         showDialog(
                                           context: context,
                                           builder: (BuildContext context) {
@@ -577,13 +552,13 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
                                     },
 
                                     child: Row(
-                                      mainAxisSize: MainAxisSize.max, // Ensure the button adjusts to content size
+                                      mainAxisSize: MainAxisSize.max,
                                       children: [
-                                        Icon(Icons.edit_note_outlined, color: Colors.green), // Icon with green color
-                                        SizedBox(width: 8), // Space between the icon and text
+                                        Icon(Icons.edit_note_outlined, color: Colors.green),
+                                        SizedBox(width: 8),
                                         Text(
                                           'Generate a Report',
-                                          style: TextStyle(color: Colors.green), // Text color set to green
+                                          style: TextStyle(color: Colors.green),
                                         ),
                                       ],
                                     ),
@@ -601,14 +576,14 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
             ),
           ),
           Positioned(
-            top: 60, // Adjust this value to move the button down
-            left: 16, // Horizontal position
+            top: 60, 
+            left: 16,
             child: FloatingActionButton(
-              mini: true, // Smaller back button
+              mini: true,
               backgroundColor: isDarkMode ? Colors.grey : Colors.green,
               onPressed: () {
                 Navigator.of(context)
-                    .pop(); // Navigate back to the previous screen
+                    .pop(); 
               },
               child: Icon(Icons.arrow_back, color: Colors.white),
             ),

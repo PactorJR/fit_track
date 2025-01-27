@@ -14,8 +14,16 @@ class HistoryPage extends StatefulWidget {
 }
 
 class _HistoryPageState extends State<HistoryPage> {
-  String? userID; // Declare at the top to store the userID
-  String _selectedFilter = 'Cashin'; // Default filter
+  String? userID;
+  String _selectedFilter = 'Cashin';
+  bool _isLoading = true;
+  List<QueryDocumentSnapshot> _logs = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchAllData();
+  }
 
   Future<List<QueryDocumentSnapshot>> _getCombinedLogs(String? userID) async {
     if (userID == null) return [];
@@ -48,8 +56,9 @@ class _HistoryPageState extends State<HistoryPage> {
         ...results[1].docs,
         ...results[2].docs
       ];
-      allLogs.sort((a, b) => (b['scannedTime'] as Timestamp)
-          .compareTo(a['scannedTime'] as Timestamp));
+      allLogs.sort((a, b) =>
+          (b['scannedTime'] as Timestamp)
+              .compareTo(a['scannedTime'] as Timestamp));
 
       return allLogs;
     } catch (e) {
@@ -58,10 +67,40 @@ class _HistoryPageState extends State<HistoryPage> {
     }
   }
 
+  Future<void> _fetchAllData() async {
+    setState(() => _isLoading = true);
+
+    try {
+
+      final userID = await _getUserID();
+
+      if (userID != null) {
+
+        final combinedLogs = await _getCombinedLogs(userID);
+
+
+        setState(() {
+          _logs = combinedLogs;
+        });
+      } else {
+        debugPrint("No userID found.");
+      }
+    } catch (e) {
+      debugPrint("Error fetching data: $e");
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _onRefresh() async {
+    await _fetchAllData();
+    print(_logs);
+  }
+
   Future<String?> _getUserID() async {
     User? currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
-      return null; // User is not authenticated, return null
+      return null;
     }
 
     DocumentSnapshot userDoc = await FirebaseFirestore.instance
@@ -70,9 +109,10 @@ class _HistoryPageState extends State<HistoryPage> {
         .get();
 
     if (userDoc.exists) {
-      return userDoc.get('userID') as String?; // Ensure it returns a String? value
+      return userDoc.get(
+          'userID') as String?;
     } else {
-      return null; // User document does not exist, return null
+      return null;
     }
   }
 
@@ -81,137 +121,220 @@ class _HistoryPageState extends State<HistoryPage> {
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     bool isDarkMode = themeProvider.isDarkMode;
+    double screenWidth = MediaQuery.of(context).size.width;
+    double screenHeight = MediaQuery.of(context).size.height;
+
+    double containerHeight;
+
+    if (screenWidth <= 409) {
+      containerHeight = screenHeight * 0.65;
+    } else if (screenWidth >= 410) {
+      containerHeight = screenHeight * 0.65;
+    } else {
+      containerHeight = screenHeight * 0.70;
+    }
+
     return WillPopScope(
       onWillPop: () async {
-        return false; // Prevent the user from navigating back.
+        return false;
       },
       child: Scaffold(
         body: FutureBuilder<String?>(
-          future: _getUserID(), // Fetch the userID asynchronously
+          future: _getUserID(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
             if (!snapshot.hasData) {
-              return const Center(child: Text('User not authenticated or userID not found.'));
+              return const Center(
+                child: Text('User not authenticated or userID not found.'),
+              );
             }
 
-            final userID = snapshot.data; // Get the userID from snapshot
+            final userID = snapshot.data;
 
             return Stack(
               children: [
-                // Background container with the image
+
                 Container(
                   decoration: BoxDecoration(
                     image: DecorationImage(
                       image: AssetImage(
                         isDarkMode
                             ? 'assets/images/dark_bg.png'
-                            : 'assets/images/bg.png', // Switch background image based on dark mode
+                            : 'assets/images/bg.png',
                       ),
                       fit: BoxFit.cover,
                     ),
                   ),
                 ),
-                // Foreground content container
-                Container(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    children: [
-                      // History container
-                      Container(
-                        padding: const EdgeInsets.all(8.0),
-                        decoration: BoxDecoration(
-                          color: isDarkMode
-                              ? Colors.black38
-                              : Colors.green[800], // Set color based on dark mode
-                          borderRadius: BorderRadius.circular(16.0),
-                        ),
-                        child: Column(
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween, // Pushes elements to opposite ends
-                                children: [
-                                  Padding(
-                                    padding:  EdgeInsets.only(left: 10.0),
-                                    child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.history,
-                                        color: isDarkMode ? Colors.white : Colors.white, // Black for dark mode, white for light mode
-                                        size: 30,
-                                      ),
-                                      SizedBox(width: 10.0),
-                                      Text(
-                                        'HISTORY',
-                                        style: TextStyle(
-                                          color: isDarkMode ? Colors.white : Colors.white, // White for dark mode, black for light mode
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                    ),
-                                  ),
+                RefreshIndicator(
+                  onRefresh: _onRefresh,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
 
-                                  // Filter button
-                              Padding(
-                                padding: const EdgeInsets.only(right: 10.0),
-                                  child: PopupMenuButton<String>(
-                                    icon: Icon(
-                                      Icons.filter_list,
-                                      color: isDarkMode ? Colors.white : Colors.white, // Set color based on dark mode
+                    child: Container(
+                      padding: screenWidth < 360
+                          ? const EdgeInsets.symmetric(
+                          vertical: 8, horizontal: 10)
+                          : const EdgeInsets.symmetric(
+                          vertical: 10, horizontal: 16),
+                      child: Column(
+                        children: [
+
+                          Container(
+                            padding: screenWidth <= 409
+                                ? const EdgeInsets.all(
+                                8)
+                                : const EdgeInsets.all(16),
+
+                            decoration: BoxDecoration(
+                              color: isDarkMode
+                                  ? Colors.black38
+                                  : Colors.green[800],
+
+                              borderRadius: BorderRadius.circular(16.0),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment
+                                      .spaceBetween,
+
+                                  children: [
+                                    Padding(
+                                      padding: screenWidth <= 409
+                                          ? const EdgeInsets.only(
+                                          left: 8.0)
+                                          : const EdgeInsets.only(left: 10.0),
+
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.history,
+                                            color: isDarkMode
+                                                ? Colors.white
+                                                : Colors.white,
+
+                                            size: screenWidth <= 409
+                                                ? 24
+                                                : 30,
+                                          ),
+                                          SizedBox(width: screenWidth <= 409
+                                              ? 8.0
+                                              : 10.0),
+
+                                          Text(
+                                            'HISTORY',
+                                            style: TextStyle(
+                                              color: isDarkMode
+                                                  ? Colors.white
+                                                  : Colors.white,
+
+                                              fontSize: screenWidth <= 409
+                                                  ? 16
+                                                  : 20,
+
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                    onSelected: (value) {
-                                      setState(() {
-                                        _selectedFilter = value;
-                                      });
-                                    },
-                                    color: isDarkMode ? Colors.black87 : Colors.green.shade800,
-                                    itemBuilder: (BuildContext context) {
-                                      return ['Cashin', 'All', 'Login', 'Logout']
-                                          .map((String choice) {
-                                        return PopupMenuItem<String>(
-                                          value: choice,
+
+                                    Padding(
+                                      padding: screenWidth <= 409
+                                          ? const EdgeInsets.only(
+                                          right: 8.0)
+                                          : const EdgeInsets.only(right: 10.0),
+
+                                      child: PopupMenuButton<String>(
+                                        icon: Icon(
+                                          Icons.filter_list,
+                                          color: isDarkMode
+                                              ? Colors.white
+                                              : Colors
+                                              .white,
+                                        ),
+                                        onSelected: (value) {
+                                          setState(() {
+                                            _selectedFilter = value;
+                                          });
+                                        },
+                                        color: isDarkMode
+                                            ? Colors.black87
+                                            : Colors.green.shade800,
+                                        itemBuilder: (BuildContext context) {
+                                          return [
+                                            'Cashin',
+                                            'All',
+                                            'Login',
+                                            'Logout'
+                                          ]
+                                              .map((String choice) {
+                                            return PopupMenuItem<String>(
+                                              value: choice,
+                                              child: Text(
+                                                choice,
+                                                style: const TextStyle(
+                                                    color: Colors
+                                                        .white),
+                                              ),
+                                            );
+                                          }).toList();
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10.0),
+
+                                SizedBox(
+                                  height:containerHeight,
+                                  child: FutureBuilder<
+                                      List<QueryDocumentSnapshot>>(
+                                    future: _getCombinedLogs(userID),
+
+                                    builder: (context, snapshot) {
+                                      if (snapshot.connectionState ==
+                                          ConnectionState.waiting) {
+                                        return const Center(
+                                            child: CircularProgressIndicator());
+                                      }
+                                      if (snapshot.hasError) {
+                                        return Center(
                                           child: Text(
-                                            choice,
-                                            style: TextStyle(color: Colors.white), // Set text color
+                                              'Error: ${snapshot.error}'),
+                                        );
+                                      }
+
+                                      final logs = snapshot.data ?? [];
+                                      if (logs.isEmpty &&
+                                          _selectedFilter == 'All') {
+                                        return const Center(
+                                          child: Text(
+                                            "No History at the Moment",
+                                            style: TextStyle(
+                                              color: Colors.white,
+
+                                              fontSize: 16.0,
+
+                                              fontWeight: FontWeight
+                                                  .bold,
+                                            ),
                                           ),
                                         );
-                                      }).toList();
+                                      }
+                                      return _buildLogContainer(logs);
                                     },
                                   ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 10.0),
-                            // Logs list container
-                            SizedBox(
-                              height: MediaQuery.of(context).size.height * 0.6, // Set height as a fraction of the screen height
-                              child: FutureBuilder<List<QueryDocumentSnapshot>>(
-                                future: _getCombinedLogs(userID), // Pass the userID
-                                builder: (context, snapshot) {
-                                  if (snapshot.connectionState == ConnectionState.waiting) {
-                                    return const Center(child: CircularProgressIndicator());
-                                  }
-                                  if (snapshot.hasError) {
-                                    return Center(
-                                      child: Text('Error: ${snapshot.error}'),
-                                    );
-                                  }
-
-                                  final logs = snapshot.data ?? [];
-                                  if (logs.isEmpty && _selectedFilter == 'All') {
-                                    return const Center(child: Text('No logs available.'));
-                                  }
-                                  return _buildLogContainer(logs);
-                                },
-                              ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ],
@@ -222,8 +345,15 @@ class _HistoryPageState extends State<HistoryPage> {
     );
   }
 
+
   Widget _buildLogContainer(List<QueryDocumentSnapshot> logs) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    bool isDarkMode = themeProvider.isDarkMode;
     List<Widget> filteredLogs = [];
+
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
     for (var log in logs) {
       final data = log.data() as Map<String, dynamic>;
@@ -232,7 +362,7 @@ class _HistoryPageState extends State<HistoryPage> {
       final isLogout = data['scannedQR'] == 'http://www.FitTrack_Logout.com';
       final isCashInLog = data.containsKey('amount');
 
-      // Apply filter based on the selected filter
+
       if (_selectedFilter == 'All' ||
           (_selectedFilter == 'Login' && isLogin) ||
           (_selectedFilter == 'Logout' && isLogout) ||
@@ -283,29 +413,27 @@ class _HistoryPageState extends State<HistoryPage> {
                   Text(description,
                       style: const TextStyle(color: Colors.white70)),
                   if (isCashInLog || isLogin)
-                    Expanded(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Align(
-                            alignment: Alignment.topRight,
-                            child: Padding(
-                              padding: const EdgeInsets.only(bottom: 10.0),
-                              child: Text(
-                                isCashInLog
-                                    ? "+ ₱ ${data['amount']?.toStringAsFixed(
-                                    2) ?? '0.00'}"
-                                    : "- ₱ 30.00",
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 20.0,
-                                ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Align(
+                          alignment: Alignment.topRight,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 10.0),
+                            child: Text(
+                              isCashInLog
+                                  ? "+ ₱${(data['amount']?.toStringAsFixed(
+                                  2)) ?? '0.00'}"
+                                  : "- ₱30.00",
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 20.0,
                               ),
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                 ],
               ),
@@ -316,7 +444,7 @@ class _HistoryPageState extends State<HistoryPage> {
                     builder: (context) =>
                         HistoryDescPage(
                           logData: data,
-                          transactionId: log.id, // Pass the document ID
+                          transactionId: log.id,
                         ),
                   ),
                 );
@@ -327,11 +455,29 @@ class _HistoryPageState extends State<HistoryPage> {
       }
     }
 
-    // Ensure we return the ListView outside of the loop
-    return ListView(
-      children: filteredLogs.isNotEmpty
-          ? filteredLogs
-          : [const Center(child: Text('No logs matching the filter.'))],
+
+    return RefreshIndicator(
+      onRefresh: _onRefresh,
+      child: filteredLogs.isNotEmpty
+          ? ListView(
+        children: filteredLogs,
+      )
+          : ListView(
+        children: [
+          Center(
+            child: Text(
+              "No History at the Moment",
+              style: TextStyle(
+                color: isDarkMode ? Colors.white : Colors.white,
+
+                fontSize: 16.0,
+
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

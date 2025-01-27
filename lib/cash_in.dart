@@ -40,6 +40,7 @@ class _CashInPageState extends State<CashInPage> {
   DocumentSnapshot? _userData;
   String? _qrData;
 
+
   @override
   void initState() {
     super.initState();
@@ -49,19 +50,37 @@ class _CashInPageState extends State<CashInPage> {
       _generateQRCode();
     }
   }
+  bool _isLoading = true;
+  Future<void> _fetchAllData() async {
+    setState(() => _isLoading = true);
+    _fetchUserData();
+    _generateQRCode();
+    try {
+      await Future.wait([
+      ]);
+    } catch (e) {
+      print("Error fetching data: $e");
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _onRefresh() async {
+    await _fetchAllData();
+  }
 
   Future<void> _fetchUserData() async {
     try {
-      // Fetch user data from Firestore
       DocumentSnapshot userDoc = await FirebaseFirestore.instance
           .collection('users')
-          .doc(_user!.uid)  // Fetching the current user's document
+          .doc(_user!.uid)
           .get();
 
       if (userDoc.exists) {
         setState(() {
           _userData = userDoc;
-          _qrData = _userData?.get('userID')?.toString() ?? 'Not available'; // Retrieve the numeric userID
+          _qrData = _userData?.get('userID')?.toString() ??
+              'Not available';
         });
       } else {
         print('User document does not exist');
@@ -74,7 +93,7 @@ class _CashInPageState extends State<CashInPage> {
   void _generateQRCode() {
     if (_user != null) {
       setState(() {
-        _qrData = _user!.uid; // QR code data is now only the user's ID
+        _qrData = _user!.uid;
       });
     }
   }
@@ -83,6 +102,26 @@ class _CashInPageState extends State<CashInPage> {
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     bool isDarkMode = themeProvider.isDarkMode;
+    double screenWidth = MediaQuery.of(context).size.width;
+    double screenHeight = MediaQuery.of(context).size.height;
+
+    double containerHeight;
+    double containerWidth;
+    double QRcontainerHeight;
+
+    if (screenWidth <= 409) {
+      containerHeight = screenHeight * 0.23;
+      QRcontainerHeight = screenHeight * 0.38;
+      containerWidth = screenWidth * 0.90;
+    } else if (screenWidth >= 410) {
+      QRcontainerHeight = screenHeight * 0.35;
+      containerHeight = screenHeight * 0.22;
+      containerWidth = screenWidth * 0.90;
+    } else {
+      containerHeight = screenHeight * 0.25;
+      containerWidth = screenWidth * 0.90;
+      QRcontainerHeight = screenHeight * 0.23;
+    }
 
     return Scaffold(
       body: Stack(
@@ -93,198 +132,223 @@ class _CashInPageState extends State<CashInPage> {
                 image: AssetImage(
                   isDarkMode
                       ? 'assets/images/dark_bg.png'
-                      : 'assets/images/bg.png', // Switch background image based on dark mode
+                      : 'assets/images/bg.png',
                 ),
                 fit: BoxFit.cover,
               ),
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 20.0, horizontal: 24.0),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 150.0),
+            child: RefreshIndicator(
+              onRefresh: _onRefresh,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                      Container(
+                      height: containerHeight,
+                      width: containerWidth,
+                      padding: const EdgeInsets.symmetric(vertical: 15.0, horizontal: 15.0),
                       decoration: BoxDecoration(
-                        color: isDarkMode ? Colors.white : Colors.green[800],
+                        color: isDarkMode ? Colors.black : Colors.green.shade800.withOpacity(0.8),
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.grey.withOpacity(0.3),
-                            spreadRadius: 2,
+                            color: Colors.black.withOpacity(0.3),
+                            spreadRadius: 1,
                             blurRadius: 5,
                             offset: Offset(0, 3),
                           ),
                         ],
                       ),
-                      child: Column(
-                        children: [
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ProfilePage(),
-                                ),
-                              );
-                            },
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: isDarkMode
-                                    ? Colors.black87
-                                    : Colors.green[100],
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              padding: const EdgeInsets.all(16),
-                              child: Row(
-                                children: [
-                                  StreamBuilder<DocumentSnapshot>(
-                                    stream: FirebaseFirestore.instance
-                                        .collection('users')
-                                        .doc(FirebaseAuth.instance.currentUser!.uid) // Fetch the logged-in user's document
-                                        .snapshots(),
-                                    builder: (context, snapshot) {
-                                      if (snapshot.connectionState == ConnectionState.waiting) {
-                                        return CircularProgressIndicator();
-                                      }
-                                      if (snapshot.hasError) {
-                                        return Text('Error: ${snapshot.error}');
-                                      }
-                                      if (snapshot.hasData) {
-                                        // Retrieve the document data as a Map
-                                        Map<String, dynamic>? _userData = snapshot.data!.data() as Map<String, dynamic>?;
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => ProfilePage()),
+                                );
+                              },
+                              child: Center(
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
 
-                                        // Debug log for the user data
-                                        print('User document data: $_userData');
+                                    StreamBuilder<DocumentSnapshot>(
+                                      stream: FirebaseFirestore.instance
+                                          .collection('users')
+                                          .doc(FirebaseAuth.instance.currentUser!.uid)
+                                          .snapshots(),
+                                      builder: (context, snapshot) {
+                                        if (snapshot.connectionState == ConnectionState.waiting) {
+                                          return CircularProgressIndicator();
+                                        }
+                                        if (snapshot.hasError) {
+                                          return Text('Error: ${snapshot.error}');
+                                        }
+                                        if (snapshot.hasData) {
+                                          Map<String, dynamic>? _userData =
+                                          snapshot.data!.data() as Map<String, dynamic>?;
+                                          int profileIconIndex = _userData != null &&
+                                              _userData['profileIconIndex'] != null
+                                              ? (_userData['profileIconIndex'] as int) + 1
+                                              : 1;
 
-                                        // Retrieve profileIconIndex or use default and add +1
-                                        int profileIconIndex = _userData != null && _userData['profileIconIndex'] != null
-                                            ? (_userData['profileIconIndex'] as int) + 1
-                                            : 1; // Default to 1 if profileIconIndex is null or missing
+                                          double avatarRadius =
+                                          screenWidth <= 409 ? 30.0 : screenWidth <= 410 ? 40.0 : 50.0;
 
-                                        // Debug log for the profileIconIndex
-                                        print('Updated profileIconIndex (with +1): $profileIconIndex');
-
-                                        return CircleAvatar(
-                                          radius: 50,
-                                          backgroundColor: Colors.grey[200], // Fallback background color
-                                          backgroundImage: _userData != null &&
-                                              _userData['profileImage'] != null &&
-                                              _userData['profileImage'].isNotEmpty
-                                              ? NetworkImage(_userData['profileImage']) // Display the uploaded image
-                                              : AssetImage('assets/images/Icon$profileIconIndex.png') as ImageProvider, // Display the selected icon
-                                          child: _userData != null &&
-                                              _userData['profileImage'] != null &&
-                                              _userData['profileImage'].isNotEmpty
-                                              ? null // Do not display a child if the profile image is available
-                                              : null, // No child if profileImage is null (AssetImage used instead)
-                                        );
-                                      }
-                                      return Text('No user data found.');
-                                    },
-                                  ),
-                                  SizedBox(width: 20),
-                                  Expanded(
-                                    child: Column(
+                                          return CircleAvatar(
+                                            radius: avatarRadius,
+                                            backgroundColor: Colors.grey[200],
+                                            backgroundImage: _userData != null &&
+                                                _userData['profileImage'] != null &&
+                                                _userData['profileImage'].isNotEmpty
+                                                ? NetworkImage(_userData['profileImage'])
+                                                : AssetImage('assets/images/Icon$profileIconIndex.png')
+                                            as ImageProvider,
+                                          );
+                                        }
+                                        return Text('No user data found.');
+                                      },
+                                    ),
+                                    const SizedBox(width: 20),
+                                    Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           "${_userData?.get('firstName') ?? 'First Name'} ${_userData?.get('lastName') ?? 'Last Name'}",
                                           style: TextStyle(
-                                              fontSize: 30, fontWeight: FontWeight.bold),
+                                            fontSize: screenWidth <= 409 ? 24 : 30,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
                                         ),
                                         Text(
                                           "User ID: ${_userData?.get('userID') ?? 'Not available'}",
-                                          style: TextStyle(fontSize: 17),
+                                          style: TextStyle(fontSize: screenWidth <= 409 ? 13 : 17, color: Colors.white,),
                                         ),
                                         Text(
                                           "User Type: ${_userData?.get('userType') ?? 'Not available'}",
-                                          style: TextStyle(fontSize: 17),
+                                          style: TextStyle(fontSize: screenWidth <= 409 ? 13 : 17, color: Colors.white,),
                                         ),
                                         Text(
                                           "Wallet: ₱ ${_userData?.get('wallet') ?? 'Not available'}",
                                           style: TextStyle(
-                                              fontSize: 17, fontWeight: FontWeight.bold),
+                                            fontSize: screenWidth <= 409 ? 13 : 17,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        Row(
+                                          children: [
+                                            Text(
+                                              "Status: ",
+                                              style: TextStyle(
+                                                fontSize: screenWidth <= 409 ? 13 : 17,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                            Text(
+                                              _userData?.get('loggedStatus') == false
+                                                  ? 'Logged Out'
+                                                  : 'Inside',
+                                              style: TextStyle(
+                                                fontSize: screenWidth <= 409 ? 13 : 17,
+                                                fontWeight: FontWeight.bold,
+                                                color: _userData?.get('loggedStatus') == false
+                                                    ? Colors.red
+                                                    : Colors.green,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ],
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16.0),
-                    Container(
-                      padding: const EdgeInsets.all(20.0),
-                      decoration: BoxDecoration(
-                        color: isDarkMode
-                            ? Colors.white
-                            : Colors.green.shade800,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.withOpacity(0.3),
-                            spreadRadius: 2,
-                            blurRadius: 5,
-                            offset: Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: isDarkMode
-                              ? Colors.black87
-                              : Colors.green.shade100.withOpacity(0.8),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            Text(
-                              "User QR Code",
-                              style: TextStyle(
-                                fontSize: 24,
-                                color: isDarkMode ? Colors.white : Colors.black,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            if (_qrData != null)
-                              QrImageView(
-                                data: _qrData!,
-                                version: QrVersions.auto,
-                                size: 325.0,
-                                foregroundColor: isDarkMode ? Colors.white : Colors.black,
-                              ),
-                            const SizedBox(height: 8),
                           ],
                         ),
                       ),
+                      ),
+                        const SizedBox(height: 50.0),
+                        Container(
+                          width: 390,
+                          height: QRcontainerHeight,
+                          padding: const EdgeInsets.all(20.0),
+                          decoration: BoxDecoration(
+                            color: isDarkMode ? Colors.black : Colors.green
+                                .shade800.withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.3),
+                                spreadRadius: 1,
+                                blurRadius: 5,
+                                offset: Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                            child: Column(
+                              children: [
+                                Text(
+                                  "User QR Code",
+                                  style: TextStyle(
+                                    fontSize: screenWidth <= 409 ? 20 : 25,
+                                    color: isDarkMode ? Colors.white : Colors
+                                        .white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                if (_qrData != null)
+                                  QrImageView(
+                                    data: _qrData!,
+                                    version: QrVersions.auto,
+                                    size: screenWidth <= 409 ? 200 : 235,
+                                    foregroundColor: isDarkMode
+                                        ? Colors.white
+                                        : Colors.white,
+                                  ),
+                                const SizedBox(height: 8),
+                              ],
+                            ),
+                          ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
           ),
-          // Title at the top
           Positioned(
-            top: 80, // Adjust the top position as needed
-            left: 0, // Start from the left edge of the screen
-            right: 0, // Make it span to the right edge as well
+            top: 40,
+            left: MediaQuery
+                .of(context)
+                .size
+                .width / 2 - 50,
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center, // Center the content horizontally
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
                   Icons.attach_money,
-                  size: 24, // Adjust the icon size as needed
+                  size: 24,
                   color: isDarkMode ? Colors.white : Colors.green,
                 ),
-                const SizedBox(width: 8), // Adds space between the icon and text
+                const SizedBox(width: 8),
                 Text(
                   'Cash In',
                   style: TextStyle(
@@ -297,15 +361,18 @@ class _CashInPageState extends State<CashInPage> {
             ),
           ),
           Positioned(
-            top: 60, // Adjust this value to move the button down
-            left: 16, // Horizontal position
-            child: FloatingActionButton(
-              mini: true, // Smaller back button
-              backgroundColor: isDarkMode ? Colors.grey : Colors.green,
-              onPressed: () {
-                Navigator.of(context).pop(); // Navigate back to the previous screen
-              },
-              child: Icon(Icons.arrow_back, color: Colors.white),
+            top: 20,
+            left: 16,
+            child: Padding(
+              padding: const EdgeInsets.all(6.0),
+              child: FloatingActionButton(
+                mini: true,
+                backgroundColor: isDarkMode ? Colors.grey : Colors.green,
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: Icon(Icons.arrow_back, color: Colors.white),
+              ),
             ),
           ),
         ],

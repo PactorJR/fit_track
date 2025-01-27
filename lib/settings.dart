@@ -4,7 +4,6 @@ import 'login.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'scan_qr.dart';
 import 'about.dart';
-import 'privacy.dart';
 import 'helpsupport.dart';
 import 'preferences.dart';
 import 'alerts.dart';
@@ -17,9 +16,8 @@ class Settings extends StatefulWidget {
 }
 
 class _SettingsState extends State<Settings> {
-  bool _isDarkMode = false; // Initialize the theme with a default value
+  bool _isDarkMode = false;
 
-  // Toggles the theme between light and dark modes
   void _toggleTheme(bool isDark) {
     setState(() {
       _isDarkMode = isDark;
@@ -35,13 +33,13 @@ class _SettingsState extends State<Settings> {
         textTheme: TextTheme(
           bodyLarge: TextStyle(color: Colors.white),
           bodyMedium: TextStyle(color: Colors.white),
-          headlineSmall: TextStyle(color: Colors.white), // AppBar text
+          headlineSmall: TextStyle(color: Colors.white),
         ),
         scaffoldBackgroundColor: Colors.black87,
         appBarTheme: AppBarTheme(
-          backgroundColor: Colors.black87, // Dark AppBar background
+          backgroundColor: Colors.black87,
           titleTextStyle: TextStyle(color: Colors.white, fontSize: 20),
-          iconTheme: IconThemeData(color: Colors.white), // AppBar icons
+          iconTheme: IconThemeData(color: Colors.white),
         ),
       )
           : ThemeData(
@@ -50,12 +48,12 @@ class _SettingsState extends State<Settings> {
         textTheme: TextTheme(
           bodyLarge: TextStyle(color: Colors.black),
           bodyMedium: TextStyle(color: Colors.black),
-          headlineSmall: TextStyle(color: Colors.black), // AppBar text
+          headlineSmall: TextStyle(color: Colors.black),
         ),
         appBarTheme: AppBarTheme(
-          backgroundColor: Colors.green, // Light AppBar background
+          backgroundColor: Colors.green,
           titleTextStyle: TextStyle(color: Colors.black, fontSize: 20),
-          iconTheme: IconThemeData(color: Colors.black), // AppBar icons
+          iconTheme: IconThemeData(color: Colors.black),
         ),
       ),
       home: SettingsPage(
@@ -68,8 +66,6 @@ class _SettingsState extends State<Settings> {
     );
   }
 }
-
-
 
 class SettingsPage extends StatefulWidget {
   final bool isDarkMode;
@@ -86,20 +82,24 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-
   Future<void> _proceedToSignOut() async {
+    final User? user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No user is currently logged in.')),
+      );
+      return;
+    }
+
     try {
-      // Sign out the user
       await _auth.signOut();
 
-      // Set dark mode to false (light mode) when the user logs out
       final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-      themeProvider.toggleTheme(false); // Set to light mode
+      themeProvider.toggleTheme(false);
 
-      // Notify the Alerts page (if it's open) to cancel notifications
       alertsPageKey.currentState?.cancelNotificationsOnLogout();
 
-      // Redirect to the LoginPage
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (context) => LoginPage()),
       );
@@ -110,34 +110,42 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-
   Future<void> _signOut() async {
-    final User? user = _auth.currentUser;
-    if (user != null) {
-      QuerySnapshot querySnapshot = await _firestore
-          .collection('logintime')
-          .where('userID', isEqualTo: user.uid)
+    try {
+      final User? user = FirebaseAuth.instance.currentUser;
+
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No user is currently logged in.')),
+        );
+        return;
+      }
+
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
           .get();
 
-      if (querySnapshot.docs.isNotEmpty) {
-        DocumentSnapshot snapshot = querySnapshot.docs.first;
-        var data = snapshot.data() as Map<String, dynamic>?;
+      if (userDoc.exists) {
+        final loggedStatus = userDoc.data()?['loggedStatus'];
 
-        if (data != null) {
-          print("loggedOut value: ${data['loggedOut']}");
-
-          if (data['loggedOut'] == false) {
-            print("loggedOut is false, showing prompt");
-            _showLogoutPrompt();
-          } else {
-            print("loggedOut is true, proceeding to sign out");
-            _proceedToSignOut();
-          }
+        if (loggedStatus == true) {
+          _showLogoutPrompt();
+          return;
         }
-      } else {
-        print("No document found for this user, proceeding to sign out");
-        _proceedToSignOut();
       }
+
+      await FirebaseAuth.instance.signOut();
+      Provider.of<ThemeProvider>(context, listen: false).toggleTheme(false);
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => LoginPage()),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error signing out: $e')),
+      );
     }
   }
 
@@ -152,13 +160,13 @@ class _SettingsPageState extends State<SettingsPage> {
             TextButton(
               child: Text("Cancel"),
               onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
+                Navigator.of(context).pop();
               },
             ),
             TextButton(
               child: Text("Scan QR"),
               onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
+                Navigator.of(context).pop();
                 Navigator.of(context).push(
                   MaterialPageRoute(builder: (context) => ScanPage()),
                 );
@@ -182,10 +190,9 @@ class _SettingsPageState extends State<SettingsPage> {
       body: Container(
         decoration: BoxDecoration(
           image: DecorationImage(
-            // Switch between background images based on the dark mode
             image: AssetImage(themeProvider.isDarkMode
-                ? 'assets/images/dark_bg.png'  // Dark mode background
-                : 'assets/images/bg.png'),     // Light mode background
+                ? 'assets/images/dark_bg.png'
+                : 'assets/images/bg.png'),
             fit: BoxFit.cover,
           ),
         ),
@@ -193,9 +200,15 @@ class _SettingsPageState extends State<SettingsPage> {
           children: [
             Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                padding: EdgeInsets.symmetric(horizontal: MediaQuery
+                    .of(context)
+                    .size
+                    .width < 360 ? 10.0 : 16.0),
                 child: Container(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: EdgeInsets.all(MediaQuery
+                      .of(context)
+                      .size
+                      .width < 360 ? 12.0 : 16.0),
                   decoration: BoxDecoration(
                     color: themeProvider.isDarkMode
                         ? Colors.grey.shade800
@@ -213,7 +226,10 @@ class _SettingsPageState extends State<SettingsPage> {
                           Text(
                             'SETTINGS',
                             style: TextStyle(
-                              fontSize: 24,
+                              fontSize: MediaQuery
+                                  .of(context)
+                                  .size
+                                  .width < 360 ? 15 : 20,
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
                             ),
@@ -221,78 +237,64 @@ class _SettingsPageState extends State<SettingsPage> {
                         ],
                       ),
                       const SizedBox(height: 20),
-
-                      // Menu items with boxShadow
                       buildMenuItem(
+                        context: context,
                         title: 'App Theme',
                         icon: Icons.brightness_4,
                         trailing: Switch(
                           value: themeProvider.isDarkMode,
                           onChanged: (bool value) {
-                            themeProvider.toggleTheme(value); // Use provider to update theme globally
+                            themeProvider.toggleTheme(value);
                           },
-                          activeColor: Colors.black87, // Color of the thumb when the switch is ON
-                          activeTrackColor: Colors.grey.shade100, // Color of the track when the switch is ON
-                          inactiveThumbColor: Colors.green.shade800, // Color of the thumb when the switch is OFF
-                          inactiveTrackColor: Colors.white, // Color of the track when the switch is OFF
+                          activeColor: Colors.black87,
+                          activeTrackColor: Colors.grey.shade100,
+                          inactiveThumbColor: Colors.green.shade800,
+                          inactiveTrackColor: Colors.white,
                         ),
-                        onTap: () {}, // Add an empty onTap if no specific action is required
+                        onTap: () {},
                       ),
-
                       buildMenuItem(
+                        context: context,
                         title: 'Preferences',
                         icon: Icons.settings,
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => PreferencesPage()),
+                            MaterialPageRoute(
+                                builder: (context) => PreferencesPage()),
                           );
                         },
                       ),
-
                       buildMenuItem(
+                        context: context,
                         title: 'Help and Support',
                         icon: Icons.help,
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => HelpSupportPage()),
+                            MaterialPageRoute(
+                                builder: (context) => HelpSupportPage()),
                           );
                         },
                       ),
-
                       buildMenuItem(
-                        title: 'Privacy & Security',
-                        icon: Icons.lock,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => PrivacyPage()),
-                          );
-                        },
-                      ),
-
-                      buildMenuItem(
+                        context: context,
                         title: 'About',
                         icon: Icons.info,
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => AboutPage()),
+                            MaterialPageRoute(
+                                builder: (context) => AboutPage()),
                           );
                         },
                       ),
-
                       buildMenuItem(
+                        context: context,
                         title: 'Log-Out',
                         icon: Icons.logout,
                         onTap: () async {
                           await _signOut();
-                          Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(
-                              builder: (context) => AlertsPage(alertsPageKey: alertsPageKey),
-                            ),
-                          );
                         },
                       ),
                     ],
@@ -301,16 +303,18 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
             Positioned(
-              top: 60, // Adjust this value to move the button down
-              left: 16, // Horizontal position
-              child: FloatingActionButton(
-                mini: true, // Smaller back button
-                backgroundColor: isDarkMode ? Colors.grey : Colors.green,
-                onPressed: () {
-                  Navigator.of(context)
-                      .pop(); // Navigate back to the previous screen
-                },
-                child: Icon(Icons.arrow_back, color: Colors.white),
+              top: 20,
+              left: 16,
+              child: Padding(
+                padding: const EdgeInsets.all(6.0),
+                child: FloatingActionButton(
+                  mini: true,
+                  backgroundColor: isDarkMode ? Colors.grey : Colors.green,
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: Icon(Icons.arrow_back, color: Colors.white),
+                ),
               ),
             ),
           ],
@@ -319,42 +323,57 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-
   Widget buildMenuItem({
     required String title,
     required IconData icon,
     Widget? trailing,
     required Function() onTap,
+    required BuildContext context,
   }) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    bool isDarkMode = themeProvider.isDarkMode;
+    double iconSize = MediaQuery
+        .of(context)
+        .size
+        .width < 360 ? 18 : 24;
+    double fontSize = MediaQuery
+        .of(context)
+        .size
+        .width < 360 ? 16 : 17;
+
     return GestureDetector(
       onTapDown: (_) {},
-      child: Material(
-        color: Colors.transparent,  // Ensures background is transparent
-        elevation: 0,  // Shadow effect when pressed
+      child: Card(
+        margin: const EdgeInsets.symmetric(vertical: 3),
+        color: isDarkMode ? Colors.grey.shade700 : Colors.green.shade700,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(100),
+          borderRadius: BorderRadius.circular(15),
         ),
         child: InkWell(
           onTap: () async {
-            // First, animate, then navigate
-            await Future.delayed(const Duration(milliseconds: 100));  // Delay to allow animation
-            onTap();  // Navigate after animation
+            await Future.delayed(
+                const Duration(milliseconds: 100));
+            onTap();
           },
-          onTapDown: (_) {}, // Optional: can add other effects if needed
+          onTapDown: (_) {},
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOut,
             decoration: BoxDecoration(
-              color: Colors.transparent, // Ensures no background color when not pressed
-              borderRadius: BorderRadius.circular(100),
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(15),
             ),
             child: ListTile(
-              leading: Icon(icon, color: Colors.white),
+              leading: Icon(icon, color: Colors.white, size: iconSize),
               title: Text(
                 title,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: fontSize,
+                ),
               ),
-              trailing: trailing ?? const Icon(Icons.arrow_forward_ios, color: Colors.white),
+              trailing: trailing ??
+                  const Icon(Icons.arrow_forward_ios, color: Colors.white),
             ),
           ),
         ),
@@ -363,7 +382,6 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 }
 
-// Move the SettingsOption class outside
 class SettingsOption extends StatelessWidget {
   final String title;
   final Widget? trailing;

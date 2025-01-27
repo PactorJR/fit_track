@@ -10,17 +10,18 @@ import 'home_page_admin.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:provider/provider.dart';  // Add this import
-import 'theme_provider.dart';  // Import your ThemeProvider file
-import 'package:flutter/services.dart'; // Add this import
+import 'package:provider/provider.dart';
+import 'theme_provider.dart';
+import 'package:flutter/services.dart';
+
 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Lock the app to portrait mode
+
   await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,   // Normal portrait
+    DeviceOrientation.portraitUp,
   ]);
 
   await Firebase.initializeApp(
@@ -40,12 +41,13 @@ class MyAppMain extends StatelessWidget {
         builder: (context) {
           return MaterialApp(
             theme: Provider.of<ThemeProvider>(context).themeData,
-            home: OpeningPage(),
-            routes: {
-              '/login': (context) => LoginPage(),
-              '/register': (context) => RegisterPage(),
-              '/guest': (context) => GuestPage(),
-            },
+            home: WillPopScope(
+              onWillPop: () async {
+
+                return false;
+              },
+              child: OpeningPage(),
+            ),
           );
         },
       ),
@@ -55,213 +57,279 @@ class MyAppMain extends StatelessWidget {
 
 
 
+
 class OpeningPage extends StatefulWidget {
   @override
   _SplashPageState createState() => _SplashPageState();
 }
 
 class _SplashPageState extends State<OpeningPage> {
-  bool rememberMe = false; // Track whether the user selects "Remember Me"
+  bool rememberMe = false;
   final FlutterSecureStorage storage = FlutterSecureStorage();
-  bool _isLoggedOut = false;  // Flag to track logout status
+  bool _isLoggedOut = false;
 
   @override
   void initState() {
     super.initState();
+    readSecureData();
     _checkRememberMe();
     _showLoggedInSnackbar();
   }
 
-  Future<void> _showLoggedInSnackbar() async {
-    // Only show the snackbar if the user is not logged out
-    if (_isLoggedOut) {
-      return;  // Skip showing snackbar if logged out
-    }
+  Future<void> readSecureData() async {
+    try {
+      // Try reading the stored value (which may cause decryption issues)
+      String? value = await storage.read(key: 'isRemembered');
+      if (value != null) {
+        print("Successfully retrieved secure data: $value");
+      } else {
+        print("No data found for the specified key.");
+      }
+    } catch (e) {
+      print("Error reading secure storage: $e");
 
-    String? rememberMeValue = await storage.read(key: 'isRemembered');
-    if (rememberMeValue == 'false') {
-      // Show Snackbar with session expired message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Your login session has expired!"),
-          behavior: SnackBarBehavior.floating, // Floating snackbar
-          duration: Duration(seconds: 3),
-        ),
-      );
+      // Check if the error is a BadPaddingException
+      if (e.toString().contains("BadPaddingException")) {
+        print("Decryption error detected: Bad padding. Possibly corrupted data.");
+        await _resetSecureStorage(); // Reset the secure storage in case of corruption
+      }
+    }
+  }
+
+
+  Future<void> _showLoggedInSnackbar() async {
+    if (_isLoggedOut) return;
+
+    try {
+      String? rememberMeValue = await storage.read(key: 'isRemembered');
+      if (rememberMeValue == 'false') {
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Your login session has expired!"),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      print("Error showing snackbar: $e");
     }
   }
 
   Future<void> _checkRememberMe() async {
-    String? value = await storage.read(key: 'isRemembered');
+    try {
+      String? value = await storage.read(key: 'isRemembered');
 
-    if (value == 'true') {
-      // Proceed to check if the user is logged in or auto-login logic
-      User? user = FirebaseAuth.instance.currentUser;
+      if (value == 'true') {
 
-      if (user != null) {
-        // User is already logged in, navigate to the appropriate home page
-        DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-        String userType = userDoc['userType'];
+        User? user = FirebaseAuth.instance.currentUser;
 
-        if (userType == 'Admin') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => MyAdminHomePage(title: 'FitTrack Home')),
-          );
-        } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => MyHomePage(title: 'Home')),
-          );
+        if (user != null) {
+
+          DocumentSnapshot userDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
+
+          String userType = userDoc['userType'];
+
+          if (userType == 'Admin') {
+            _navigateToHomePage(MyAdminHomePage(title: 'FitTrack Home'));
+          } else {
+            _navigateToHomePage(MyHomePage(title: 'Home'));
+          }
         }
+      } else {
+
+        await _logoutUser();
       }
-    } else {
-      // If rememberMe is false, sign the user out and show the snackbar
+    } catch (e) {
+      print("Error checking Remember Me: $e");
+      await _resetSecureStorage();
+    }
+  }
+
+  Future<void> _logoutUser() async {
+    try {
       await FirebaseAuth.instance.signOut();
       setState(() {
-        _isLoggedOut = true;  // Set the flag to true after logout
+        _isLoggedOut = true;
       });
-      _showLoggedInSnackbar();  // Correct method call here
+      await _showLoggedInSnackbar();
+    } catch (e) {
+      print("Error during logout: $e");
     }
+  }
+
+  Future<void> _resetSecureStorage() async {
+    try {
+      print("Resetting secure storage due to corruption or error.");
+      await storage.deleteAll();
+    } catch (e) {
+      print("Error resetting secure storage: $e");
+    }
+  }
+
+  void _navigateToHomePage(Widget page) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => page),
+    );
   }
 
   final PageController _controller = PageController();
   int _currentPage = 0;
 
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          // PageView for the slides
-          PageView(
-            controller: _controller,
-            onPageChanged: (index) {
-              setState(() {
-                _currentPage = index;
-              });
-            },
-            children: [
-              SlideWidget(
-                image: 'assets/images/op_img.png',
-                title: 'FitTrack CCAT: Where Campus Life Meets Workout Vibes!',
-              ),
-              SlideWidget(
-                image: 'assets/images/op_img.png',
-                title: 'FitTrack CCAT: Your Gym Near You!',
-              ),
-              SlideWidget(
-                image: 'assets/images/op_img.png',
-                title: 'FitTrack CCAT: Your Campus Workout Sidekick',
-              ),
-            ],
-          ),
-          // Top-left positioned op_img logo
-          Positioned(
-            top: 40,
-            left: 20,
-            child: Image.asset(
-              'assets/images/FitTrack_Icon.png',
-              width: 170,
-              height: 170,
-            ),
-          ),
-          // Add an image in the center
-          Positioned(
-            bottom: 180,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: SmoothPageIndicator(
-                controller: _controller,
-                count: 3,
-                effect: ExpandingDotsEffect(
-                  dotWidth: 10.0,
-                  dotHeight: 10.0,
-                  activeDotColor: Colors.green,
-                  dotColor: Colors.grey,
-                ),
-              ),
-            ),
-          ),
-          // Buttons for login, register, guest login
-          Positioned(
-            bottom: 50,
-            left: 20,
-            right: 20,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
+    return WillPopScope(
+      onWillPop: () async {
+
+        return false;
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+
+            PageView(
+              controller: _controller,
+              onPageChanged: (index) {
+                setState(() {
+                  _currentPage = index;
+                });
+              },
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Login as Member Button
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pushNamed(context, '/login'); // Navigate to login
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(25),
-                          ),
-                        ),
-                        child: Text('Login as Member'),
-                      ),
-                    ),
-                    SizedBox(width: 10), // Space between buttons
-                    // Register Button
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pushNamed(context, '/register'); // Navigate to register
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(25),
-                          ),
-                        ),
-                        child: Text('Register'),
-                      ),
-                    ),
-                  ],
+                SlideWidget(
+                  image: 'assets/images/op_img.png',
+                  title: 'FitTrack CCAT: Where Campus Life Meets Workout Vibes!',
                 ),
-                SizedBox(height: 20), // Space between row and guest login
-                // Full-width Login as Guest Button
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () {
-                      Navigator.pushNamed(context, '/guest'); // Navigate to guest
-                    },
-                    style: OutlinedButton.styleFrom(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      side: BorderSide(color: Colors.green),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(25),
-                      ),
-                    ),
-                    child: Text(
-                      'Login as Guest',
-                      style: TextStyle(color: Colors.green),
-                    ),
-                  ),
+                SlideWidget(
+                  image: 'assets/images/op_img.png',
+                  title: 'FitTrack CCAT: Your Gym Near You!',
+                ),
+                SlideWidget(
+                  image: 'assets/images/op_img.png',
+                  title: 'FitTrack CCAT: Your Campus Workout Sidekick',
                 ),
               ],
             ),
-          ),
-        ],
+
+            Positioned(
+              top: 40,
+              left: 20,
+              child: Image.asset(
+                'assets/images/FitTrack_Icon.png',
+                width: 170,
+                height: 170,
+              ),
+            ),
+
+            Positioned(
+              bottom: 180,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: SmoothPageIndicator(
+                  controller: _controller,
+                  count: 3,
+                  effect: ExpandingDotsEffect(
+                    dotWidth: 10.0,
+                    dotHeight: 10.0,
+                    activeDotColor: Colors.green,
+                    dotColor: Colors.grey,
+                  ),
+                ),
+              ),
+            ),
+
+            Positioned(
+              bottom: 50,
+              left: 20,
+              right: 20,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => LoginPage()),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.black,
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(25),
+                            ),
+                          ),
+                          child: Text('Login as Member'),
+                        ),
+                      ),
+                      SizedBox(width: 10),
+
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => RegisterPage()),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.black,
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(25),
+                            ),
+                          ),
+                          child: Text('Register'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 20),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => GuestPage()),
+                        );
+                      },
+                      style: OutlinedButton.styleFrom(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        side: BorderSide(color: Colors.green),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                      ),
+                      child: Text(
+                        'Login as Guest',
+                        style: TextStyle(color: Colors.green),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
+
 
 class SlideWidget extends StatelessWidget {
   final String image;
@@ -271,7 +339,12 @@ class SlideWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
+    return WillPopScope(
+      onWillPop: () async {
+
+        return false;
+      },
+    child: Stack(
       fit: StackFit.expand,
       children: [
         Image.asset(
@@ -286,13 +359,13 @@ class SlideWidget extends StatelessWidget {
             title,
             style: TextStyle(
               color: Colors.white,
-              fontSize: 32, // Increased font size
+              fontSize: 32,
               fontWeight: FontWeight.bold,
               shadows: [
                 Shadow(
                   offset: Offset(2, 2),
                   blurRadius: 4,
-                  color: Colors.black.withOpacity(0.5), // Optional text shadow
+                  color: Colors.black.withOpacity(0.5),
                 ),
               ],
             ),
@@ -300,6 +373,7 @@ class SlideWidget extends StatelessWidget {
           ),
         ),
       ],
+    ),
     );
   }
 }

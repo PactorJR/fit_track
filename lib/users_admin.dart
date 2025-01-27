@@ -5,7 +5,6 @@ import 'firebase_options.dart';
 import 'package:intl/intl.dart';
 import 'theme_provider.dart';
 import 'package:provider/provider.dart';
-import 'theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,9 +14,8 @@ void main() async {
 }
 
 class UsersAdminPage extends StatefulWidget {
-  final String? userId;  // Make userId nullable (optional)
+  final String? userId;
 
-  // Constructor with an optional userId, defaults to null if not provided
   UsersAdminPage({this.userId});
 
   @override
@@ -28,24 +26,21 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
   String? selectedUserId;
   TextEditingController searchController = TextEditingController();
   String searchTerm = '';
-  String selectedUserType = 'All'; // Add this to store the selected user type for sorting
-  bool seen = false;  // Initialize to a default value
-  String seenValue = 'False';  // Set to default 'False' initially
+  String selectedUserType = 'All';
+  bool seen = false;
+  String seenValue = 'False';
 
   String formatTimestamp(Timestamp timestamp) {
-    // Convert Timestamp to DateTime and format it as a String
     DateTime dateTime = timestamp.toDate();
-    return DateFormat('yyyy-MM-dd HH:mm:ss').format(dateTime);  // Adjust the format as needed
+    return DateFormat('yyyy-MM-dd HH:mm:ss').format(dateTime);
   }
 
   @override
   void initState() {
     super.initState();
-
-    // Set selectedUserId to the userId if it's not null, or use a default value if null
-    selectedUserId = widget.userId ?? null; // This makes userId optional
+    selectedUserId = widget.userId ?? null;
     if (selectedUserId != null) {
-      _selectUser(selectedUserId!); // Proceed only if userId is not null
+      _selectUser(selectedUserId!);
     }
   }
 
@@ -54,155 +49,171 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
       selectedUserId = userId;
     });
 
-    // Only update the 'seen' field if selectedUserId is not null and matches the doc.id
     if (selectedUserId != null && selectedUserId == userId) {
       FirebaseFirestore.instance
           .collection('users')
           .doc(userId)
-          .get()  // Fetch the document first to check if it exists
+          .get()
           .then((docSnapshot) {
         if (docSnapshot.exists) {
-          // Document exists, so proceed with the update
           FirebaseFirestore.instance
               .collection('users')
               .doc(userId)
               .update({'seen': true});
         } else {
-          // Document does not exist, handle the error or log it
           print("Document with ID $userId not found.");
         }
       }).catchError((error) {
-        // Handle any potential errors
         print("Error checking document: $error");
       });
     } else {
-      // Optionally handle cases where selectedUserId is null or doesn't match
       print("No user selected or user id mismatch");
     }
   }
 
-
 @override
-  Widget build(BuildContext context) {
+Widget build(BuildContext context) {
   final themeProvider = Provider.of<ThemeProvider>(context);
   bool isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Background image
-          Container(
-            decoration: BoxDecoration(
-              image: DecorationImage(
-                image: AssetImage(
-                  isDarkMode
-                      ? 'assets/images/dark_bg.png'
-                      : 'assets/images/bg.png', // Switch background image based on dark mode
+  return Scaffold(
+    body: Stack(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage(
+                isDarkMode
+                    ? 'assets/images/dark_bg.png'
+                    : 'assets/images/bg.png',
+              ),
+              fit: BoxFit.cover,
+            ),
+          ),
+        ),
+        Positioned(
+          top: 40,
+          left: MediaQuery.of(context).size.width / 2 - 50,
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.people,
+                  size: 24,
+                  color: isDarkMode ? Colors.white : Colors.green,
                 ),
-                fit: BoxFit.cover,
-              ),
+                SizedBox(width: 8),
+                Text(
+                  'Users',
+                  style: TextStyle(
+                    color: isDarkMode ? Colors.white : Colors.black,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 24,
+                  ),
+                ),
+              ],
             ),
           ),
-          // Title at the top
-          Positioned(
-            top: 100,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.people,
-                    size: 24,
-                    color: isDarkMode ? Colors.white : Colors.green,
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Users',
-                    style: TextStyle(
-                      color: isDarkMode ? Colors.white : Colors.black,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 24,
+        ),
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: 600),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Builder(
+                      builder: (context) {
+                        double devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+                        double screenWidth = MediaQuery.of(context).size.width;
+
+                        double borderWidth = (screenWidth <= 320 || devicePixelRatio < 2.0) ? 0.1 : 0.3;
+                        double borderHeight = (screenWidth <= 320 || devicePixelRatio < 2.0) ? 0.1 : 0.3;
+                        double paddingSize = (screenWidth <= 320 || devicePixelRatio < 2.0) ? 2.0 : 4.0;
+                        double fontSize = (screenWidth <= 320 || devicePixelRatio < 2.0) ? 14.0 : 16.0;
+
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16.0),
+                          child: TextField(
+                            controller: searchController,
+                            decoration: InputDecoration(
+                              labelText: 'Search Users',
+                              hintText: 'Enter name or email',
+                              prefixIcon: Icon(Icons.search),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8.0),
+                                borderSide: BorderSide(
+                                  width: borderWidth,
+                                  style: BorderStyle.solid,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: Colors.green,
+                                  width: borderWidth,
+                                  style: BorderStyle.solid,
+                                ),
+                                borderRadius: BorderRadius.circular(8.0),
+                              ),
+                              focusedErrorBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: Colors.red,
+                                  width: borderHeight,
+                                  style: BorderStyle.solid,
+                                ),
+                                borderRadius: BorderRadius.circular(8.0),
+                              ),
+                            ),
+                            style: TextStyle(fontSize: fontSize),
+                            onChanged: (value) {
+                              setState(() {
+                                searchTerm = value.toLowerCase();
+                              });
+                            },
+                          ),
+                        );
+                      },
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // Foreground content centered
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-                child: SingleChildScrollView(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: 600),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                      Padding(
+                    Padding(
                       padding: const EdgeInsets.only(bottom: 16.0),
-                      child: TextField(
-                        controller: searchController,
+                      child: DropdownButtonFormField<String>(
+                        value: selectedUserType,
                         decoration: InputDecoration(
-                          labelText: 'Search Users',
-                          hintText: 'Enter name or email',
-                          prefixIcon: Icon(Icons.search),
+                          labelText: 'Filter by User Type',
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8.0),
                           ),
-                          focusedBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.green, width: 2.0),  // Green border when focused
-                            borderRadius: BorderRadius.circular(8.0),
-                          ),
-                          focusedErrorBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.red, width: 2.0),  // Red border when focused and error occurs
-                            borderRadius: BorderRadius.circular(8.0),
-                          ),
                         ),
-                        onChanged: (value) {
+                        items: ['All', 'Faculty', 'Student', 'Admin'].map((String type) {
+                          return DropdownMenuItem<String>(
+                            value: type,
+                            child: Text(
+                              type,
+                              style: TextStyle(
+                                color: themeProvider.isDarkMode
+                                    ? Colors.white
+                                    : Colors.black,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (newValue) {
                           setState(() {
-                            searchTerm = value.toLowerCase();
+                            selectedUserType = newValue!;
                           });
                         },
                       ),
                     ),
-                    // Dropdown for sorting by user type
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 16.0),
-                            child: DropdownButtonFormField<String>(
-                              value: selectedUserType,
-                              decoration: InputDecoration(
-                                labelText: 'Filter by User Type',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8.0),
-                                ),
-                              ),
-                              items: ['All', 'Faculty', 'Student', 'Admin'].map((String type) {
-                                return DropdownMenuItem<String>(
-                                  value: type,
-                                  child: Text(
-                                    type,
-                                    style: TextStyle(
-                                      color: themeProvider.isDarkMode
-                                          ? Colors.white // Black for dark mode
-                                          : Colors.black, // Green for light mode
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                              onChanged: (newValue) {
-                                setState(() {
-                                  selectedUserType = newValue!;
-                                });
-                              },
-                            ),
-                          ),
-                          Container(
+                    Container(
                       decoration: BoxDecoration(
-                        color: themeProvider.isDarkMode
-                            ? Colors.black38 // Black for dark mode
-                            : Colors.green.withOpacity(0.8), // Green for light mode
+                        color: isDarkMode ? Colors.black38 : Colors.white,
                         borderRadius: BorderRadius.circular(16.0),
+                        border: Border.all(
+                          color: Colors.black,
+                          width: 2.0,
+                        ),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(8.0),
@@ -215,7 +226,7 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                               style: TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
-                                color: themeProvider.isDarkMode ? Colors.white : Colors.black, // Dynamic color
+                                color: themeProvider.isDarkMode ? Colors.white : Colors.black,
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -334,33 +345,33 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                         ],
                                       ),
                                       ...filteredDocs.map((doc) {
-                                        // Determine the background color based on the user status
+
                                         bool isBanned = doc['userStatus'] == 'Banned';
                                         bool isOnApproval = doc['userStatus'] == 'On Approval';
                                         bool isUnseen = doc['seen'] == false;
 
-                                        Color rowColor = Colors.transparent; // Default row color
+                                        Color rowColor = Colors.transparent;
 
                                         if (isBanned) {
-                                          rowColor = Colors.red.withOpacity(0.8); // Light red for banned users
+                                          rowColor = Colors.red.withOpacity(0.8);
                                         } else if (isOnApproval) {
-                                          rowColor = Colors.blue.withOpacity(0.8); // Light blue for users on approval
+                                          rowColor = Colors.yellow.withOpacity(0.8);
                                         } else if (isUnseen) {
-                                          rowColor = Colors.yellow.withOpacity(0.8); // Light yellow for unseen users
+                                          rowColor = Colors.yellow.withOpacity(0.8);
                                         }
 
                                         return TableRow(
                                           decoration: BoxDecoration(
                                             color: selectedUserId == doc.id
-                                                ? Colors.white.withOpacity(0.8) // Highlight selected row
-                                                : rowColor, // Apply dynamic row color
+                                                ? Colors.green.withOpacity(0.2)
+                                                : rowColor,
                                           ),
                                           children: [
                                             GestureDetector(
                                               onTap: () {
                                                 _selectUser(doc.id);
 
-                                                // Update the 'seen' field to true when the row is selected
+
                                                 FirebaseFirestore.instance
                                                     .collection('users')
                                                     .doc(doc.id)
@@ -381,7 +392,7 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               onTap: () {
                                                 _selectUser(doc.id);
 
-                                                // Update the 'seen' field to true when the row is selected
+
                                                 FirebaseFirestore.instance
                                                     .collection('users')
                                                     .doc(doc.id)
@@ -402,7 +413,7 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               onTap: () {
                                                 _selectUser(doc.id);
 
-                                                // Update the 'seen' field to true when the row is selected
+
                                                 FirebaseFirestore.instance
                                                     .collection('users')
                                                     .doc(doc.id)
@@ -423,7 +434,7 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               onTap: () {
                                                 _selectUser(doc.id);
 
-                                                // Update the 'seen' field to true when the row is selected
+
                                                 FirebaseFirestore.instance
                                                     .collection('users')
                                                     .doc(doc.id)
@@ -444,7 +455,7 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               onTap: () {
                                                 _selectUser(doc.id);
 
-                                                // Update the 'seen' field to true when the row is selected
+
                                                 FirebaseFirestore.instance
                                                     .collection('users')
                                                     .doc(doc.id)
@@ -465,7 +476,7 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               onTap: () {
                                                 _selectUser(doc.id);
 
-                                                // Update the 'seen' field to true when the row is selected
+
                                                 FirebaseFirestore.instance
                                                     .collection('users')
                                                     .doc(doc.id)
@@ -486,7 +497,7 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               onTap: () {
                                                 _selectUser(doc.id);
 
-                                                // Update the 'seen' field to true when the row is selected
+
                                                 FirebaseFirestore.instance
                                                     .collection('users')
                                                     .doc(doc.id)
@@ -507,7 +518,7 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               onTap: () {
                                                 _selectUser(doc.id);
 
-                                                // Update the 'seen' field to true when the row is selected
+
                                                 FirebaseFirestore.instance
                                                     .collection('users')
                                                     .doc(doc.id)
@@ -528,7 +539,7 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               onTap: () {
                                                 _selectUser(doc.id);
 
-                                                // Update the 'seen' field to true when the row is selected
+
                                                 FirebaseFirestore.instance
                                                     .collection('users')
                                                     .doc(doc.id)
@@ -549,7 +560,7 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               onTap: () {
                                                 _selectUser(doc.id);
 
-                                                // Update the 'seen' field to true when the row is selected
+
                                                 FirebaseFirestore.instance
                                                     .collection('users')
                                                     .doc(doc.id)
@@ -570,7 +581,7 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               onTap: () {
                                                 _selectUser(doc.id);
 
-                                                // Update the 'seen' field to true when the row is selected
+
                                                 FirebaseFirestore.instance
                                                     .collection('users')
                                                     .doc(doc.id)
@@ -593,7 +604,7 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                                               onTap: () {
                                                 _selectUser(doc.id);
 
-                                                // Update the 'seen' field to true when the row is selected
+
                                                 FirebaseFirestore.instance
                                                     .collection('users')
                                                     .doc(doc.id)
@@ -620,117 +631,163 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                             ),
                             SizedBox(height: 16),
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                // Box for "On Approval Users"
-                                Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.yellow,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    'On Approval Users',
-                                    style: TextStyle(
-                                      color: Colors.black,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                                // Box for "Banned Users"
-                                Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    'Banned Users',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                                // Box for "Active Users"
-                                Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    'Active Users',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
+                                Builder(
+                                  builder: (context) {
+
+                                    double devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+                                    double screenWidth = MediaQuery.of(context).size.width;
+
+
+                                    double fontSize = (screenWidth <= 359 || devicePixelRatio < 2.0) ? 13.0 : 10.0;
+                                    double verticalPadding = (screenWidth <= 359 || devicePixelRatio < 2.0) ? 5.0 : 7.0;
+                                    double horizontalPadding = (screenWidth <= 359 || devicePixelRatio < 2.0) ? 6.0 : 8.0;
+
+                                    return Center(
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+
+                                          Container(
+                                            padding: EdgeInsets.symmetric(
+                                              vertical: verticalPadding,
+                                              horizontal: horizontalPadding,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.yellow,
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: Text(
+                                              'On Approval Users',
+                                              style: TextStyle(
+                                                color: Colors.black,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: fontSize,
+                                              ),
+                                            ),
+                                          ),
+                                          SizedBox(width: 16),
+
+                                          Container(
+                                            padding: EdgeInsets.symmetric(
+                                              vertical: verticalPadding,
+                                              horizontal: horizontalPadding,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.red,
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: Text(
+                                              'Banned Users',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: fontSize,
+                                              ),
+                                            ),
+                                          ),
+                                          SizedBox(width: 16),
+                                          Container(
+                                            padding: EdgeInsets.symmetric(
+                                              vertical: verticalPadding,
+                                              horizontal: horizontalPadding,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.green,
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: Text(
+                                              'Active Users',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: fontSize,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
                                 ),
                               ],
                             ),
                             SizedBox(height: 16),
-                            Padding(
-                              padding: const EdgeInsets.only(top: 0.0),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                children: [
-                                  ElevatedButton(
-                                    onPressed: _createUser, // Disable if selectedUserId is empty or null
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: isDarkMode ? Colors.white : Colors.white, // Set the background color
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min, // Ensure the button size adjusts to its content
-                                      children: [
-                                        Icon(Icons.add, color: isDarkMode ? Colors.green : Colors.green,), // Change icon color to white to contrast with the green background
-                                        SizedBox(width: 8), // Add spacing between the icon and the text
-                                        Text(
-                                          'Create',
-                                          style: TextStyle(color: isDarkMode ? Colors.green : Colors.green,), // Change text color to white for visibility on green
+                            Builder(
+                              builder: (context) {
+
+                                double devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+                                double screenWidth = MediaQuery.of(context).size.width;
+
+
+                                double buttonFontSize = (screenWidth <= 320 || devicePixelRatio < 2.0) ? 12.0 : 14.0;
+                                double iconSize = (screenWidth <= 320 || devicePixelRatio < 2.0) ? 20.0 : 24.0;
+                                double paddingSize = (screenWidth <= 320 || devicePixelRatio < 2.0) ? 8.0 : 12.0;
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 0.0),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                    children: [
+                                      ElevatedButton(
+                                        onPressed: _createUser,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: isDarkMode ? Colors.white : Colors.white,
+                                          padding: EdgeInsets.symmetric(horizontal: paddingSize),
                                         ),
-                                      ],
-                                    ),
-                                  ),
-                                  ElevatedButton(
-                                    onPressed: selectedUserId?.isNotEmpty ?? false ? () => _editUser(context) : null, // Disable if selectedUserId is empty or null
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: selectedUserId?.isNotEmpty ?? false ? Colors.white : Colors.black.withOpacity(0.7), // Set background color based on selectedUserId
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.edit, color: selectedUserId?.isNotEmpty ?? false ? Colors.blue : Colors.blue), // Change icon color based on selectedUserId
-                                        SizedBox(width: 8),
-                                        Text(
-                                          'Edit',
-                                          style: TextStyle(color: selectedUserId?.isNotEmpty ?? false ? Colors.blue : Colors.blue), // Change text color based on selectedUserId
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.add, color: isDarkMode ? Colors.green : Colors.green, size: iconSize),
+                                            SizedBox(width: 8),
+                                            Text(
+                                              'Create',
+                                              style: TextStyle(color: isDarkMode ? Colors.green : Colors.green, fontSize: buttonFontSize),
+                                            ),
+                                          ],
                                         ),
-                                      ],
-                                    ),
-                                  ),
-                                  ElevatedButton(
-                                    onPressed: selectedUserId?.isNotEmpty ?? false ? () => _showDeleteConfirmationDialog(context) : null, // Disable if selectedUserId is empty or null
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: selectedUserId?.isNotEmpty ?? false ? Colors.white : Colors.black.withOpacity(0.7), // Set background color based on selectedUserId
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.delete, color: Colors.red),
-                                        SizedBox(width: 8),
-                                        Text(
-                                          'Delete',
-                                          style: TextStyle(color: Colors.red),
+                                      ),
+                                      ElevatedButton(
+                                        onPressed: selectedUserId?.isNotEmpty ?? false ? () => _editUser(context) : null,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: selectedUserId?.isNotEmpty ?? false ? (isDarkMode ? Colors.white : Colors.white) : (isDarkMode ? Colors.black.withOpacity(0.7) : Colors.grey.withOpacity(0.7)),
+                                          padding: EdgeInsets.symmetric(horizontal: paddingSize),
                                         ),
-                                      ],
-                                    ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.edit, color: selectedUserId?.isNotEmpty ?? false ? (isDarkMode ? Colors.blue : Colors.blue) : Colors.blue, size: iconSize),
+                                            SizedBox(width: 8),
+                                            Text(
+                                              'Edit',
+                                              style: TextStyle(color: selectedUserId?.isNotEmpty ?? false ? (isDarkMode ? Colors.blue : Colors.blue) : Colors.blue, fontSize: buttonFontSize),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      ElevatedButton(
+                                        onPressed: selectedUserId?.isNotEmpty ?? false ? () => _showDeleteConfirmationDialog(context) : null,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: selectedUserId?.isNotEmpty ?? false ? Colors.white : Colors.black.withOpacity(0.7),
+                                          padding: EdgeInsets.symmetric(horizontal: paddingSize),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.delete, color: Colors.red, size: iconSize),
+                                            SizedBox(width: 8),
+                                            Text(
+                                              'Delete',
+                                              style: TextStyle(color: Colors.red, fontSize: buttonFontSize),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -743,12 +800,12 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
 
           ),
           ),
-          // Positioned button at the top left
+
           Positioned(
             top: 20,
             left: 16,
             child: Padding(
-              padding: const EdgeInsets.all(6.0),  // Add padding here
+              padding: const EdgeInsets.all(6.0),
               child: FloatingActionButton(
                 mini: true,
                 backgroundColor: isDarkMode ? Colors.grey : Colors.green,
@@ -764,7 +821,7 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
     );
   }
 
-  // Create functionality
+
   void _createUser() {
     showDialog(
       context: context,
@@ -775,7 +832,7 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
   }
 
   void _selectDateAndTime(BuildContext context, TextEditingController controller) async {
-    // Show date picker first
+
     final DateTime? selectedDate = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
@@ -784,14 +841,14 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
     );
 
     if (selectedDate != null) {
-      // Show time picker if a date was selected
+
       final TimeOfDay? selectedTime = await showTimePicker(
         context: context,
-        initialTime: TimeOfDay.fromDateTime(DateTime.now()), // Set current time as default
+        initialTime: TimeOfDay.fromDateTime(DateTime.now()),
       );
 
       if (selectedTime != null) {
-        // Combine selected date and time
+
         final DateTime combinedDateTime = DateTime(
           selectedDate.year,
           selectedDate.month,
@@ -800,7 +857,7 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
           selectedTime.minute,
         );
 
-        // Format the combined date and time as "yyyy-MM-dd HH:mm"
+
         String formattedDateTime = "${combinedDateTime.toLocal().year.toString().padLeft(4, '0')}-${(combinedDateTime.month).toString().padLeft(2, '0')}-${(combinedDateTime.day).toString().padLeft(2, '0')} ${combinedDateTime.hour.toString().padLeft(2, '0')}:${combinedDateTime.minute.toString().padLeft(2, '0')}";
 
         controller.text = formattedDateTime;
@@ -809,6 +866,10 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
   }
 
   void _editUser(BuildContext context) async {
+
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    bool isDarkMode = themeProvider.isDarkMode;
+
     DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(selectedUserId).get();
 
     final firstNameController = TextEditingController(text: userDoc['firstName']);
@@ -819,127 +880,59 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
     final birthdayController = TextEditingController(text: userDoc['birthday']);
     final userTypeController = TextEditingController(text: userDoc['userType']);
     final walletController = TextEditingController(text: userDoc['wallet']?.toString());
-    String userStatus = userDoc['userStatus']; // Store current user status
-    bool seen = userDoc['seen']; // get the boolean value
-    String seenValue = seen ? 'True' : 'False'; // convert to 'True' or 'False'
-    Timestamp? registerTime = userDoc['registerTime']; // Store the Timestamp value
 
-    final registerTimeController = TextEditingController(text: registerTime != null ? registerTime.toDate().toString().split(' ')[0] : ''); // Convert to DateTime string if available
+    String userStatus = userDoc['userStatus'];
+    bool seen = userDoc['seen'];
+    String seenValue = seen ? 'True' : 'False';
+    Timestamp? registerTime = userDoc['registerTime'];
+
+    final registerTimeController = TextEditingController(text: registerTime != null ? registerTime.toDate().toString().split(' ')[0] : '');
 
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Edit User'),
+          backgroundColor: isDarkMode ? Colors.black : Colors.white,
+          title: Text(
+            'Edit User',
+            style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(
-                  controller: firstNameController,
-                  decoration: InputDecoration(labelText: 'First Name'),
-                ),
-                SizedBox(height: 8.0),
-                TextField(
-                  controller: lastNameController,
-                  decoration: InputDecoration(labelText: 'Last Name'),
-                ),
-                SizedBox(height: 8.0),
-                TextField(
-                  controller: emailController,
-                  decoration: InputDecoration(labelText: 'Email'),
-                ),
-                SizedBox(height: 8.0),
-                TextField(
-                  controller: phoneController,
-                  decoration: InputDecoration(labelText: 'Phone'),
-                  keyboardType: TextInputType.phone,
-                ),
-                SizedBox(height: 8.0),
-                TextField(
-                  controller: ageController,
-                  decoration: InputDecoration(labelText: 'Age'),
-                  keyboardType: TextInputType.number,
-                ),
-                SizedBox(height: 8.0),
-                TextField(
-                  controller: birthdayController,
-                  decoration: InputDecoration(labelText: 'Birthday'),
-                  keyboardType: TextInputType.datetime,
-                ),
-                SizedBox(height: 8.0),
-                TextField(
-                  controller: userTypeController,
-                  decoration: InputDecoration(labelText: 'User Type'),
-                ),
-                SizedBox(height: 8.0),
-                TextField(
-                  controller: walletController,
-                  decoration: InputDecoration(labelText: 'Wallet'),
-                  keyboardType: TextInputType.number,
-                ),
-                SizedBox(height: 8.0),
-                DropdownButtonFormField<String>(
-                  value: userStatus,
-                  decoration: InputDecoration(labelText: 'User Status'),
-                  items: ['Active', 'On Approval', 'Banned'].map((String status) {
-                    return DropdownMenuItem<String>(
-                      value: status,
-                      child: Text(status),
-                    );
-                  }).toList(),
-                  onChanged: (newValue) {
-                    setState(() {
-                      userStatus = newValue!;
-                    });
-                  },
-                ),
-                SizedBox(height: 8.0),
-                GestureDetector(
-                  onTap: () {
-                    _selectDateAndTime(context, registerTimeController); // Open both date and time pickers
-                  },
-                  child: AbsorbPointer(
-                    child: TextField(
-                      controller: registerTimeController,
-                      decoration: InputDecoration(labelText: 'Register Time'),
-                      keyboardType: TextInputType.datetime,
-                    ),
-                  ),
-                ),
-                SizedBox(height: 8.0),
-                DropdownButtonFormField<String>(
-                  value: seenValue, // use the string value 'True' or 'False'
-                  decoration: InputDecoration(labelText: 'Seen'),
-                  items: ['True', 'False'].map((String value) {
-                    return DropdownMenuItem<String>(
-                      value: value,
-                      child: Text(value),
-                    );
-                  }).toList(),
-                  onChanged: (newValue) {
-                    setState(() {
-                      // Update the 'seen' value as boolean based on dropdown selection
-                      seen = newValue == 'True'; // Convert the selected value back to bool
-                    });
-                  },
-                ),
-                SizedBox(height: 8.0),
+                _buildTextField(firstNameController, 'First Name', isDarkMode),
+                _buildTextField(lastNameController, 'Last Name', isDarkMode),
+                _buildTextField(emailController, 'Email', isDarkMode),
+                _buildTextField(phoneController, 'Phone', isDarkMode, keyboardType: TextInputType.phone),
+                _buildTextField(ageController, 'Age', isDarkMode, keyboardType: TextInputType.number),
+                _buildTextField(birthdayController, 'Birthday', isDarkMode, keyboardType: TextInputType.datetime),
+                _buildTextField(userTypeController, 'User Type', isDarkMode),
+                _buildTextField(walletController, 'Wallet', isDarkMode, keyboardType: TextInputType.number),
+                _buildDropdown(userStatus, 'User Status', ['Active', 'On Approval', 'Banned'], isDarkMode, (newValue) {
+                  setState(() {
+                    userStatus = newValue!;
+                  });
+                }),
+                _buildDatePicker(registerTimeController, 'Register Time', isDarkMode),
+                _buildDropdown(seenValue, 'Seen', ['True', 'False'], isDarkMode, (newValue) {
+                  setState(() {
+                    seen = newValue == 'True';
+                  });
+                }),
               ],
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Cancel', style: TextStyle(color: Colors.green)),
+              child: Text('Cancel', style: TextStyle(color: isDarkMode ? Colors.green : Colors.green)),
             ),
             TextButton(
               onPressed: () async {
-                // Parse the registerTime from the text input field and convert it to a Timestamp
                 DateTime? parsedRegisterTime = DateTime.tryParse(registerTimeController.text);
                 Timestamp? newRegisterTime = parsedRegisterTime != null ? Timestamp.fromDate(parsedRegisterTime) : null;
 
-                // Update the user's data in Firestore
                 await FirebaseFirestore.instance.collection('users').doc(selectedUserId).update({
                   'firstName': firstNameController.text,
                   'lastName': lastNameController.text,
@@ -949,14 +942,14 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
                   'birthday': birthdayController.text,
                   'userType': userTypeController.text,
                   'wallet': int.tryParse(walletController.text) ?? 0,
-                  'userStatus': userStatus, // Use selected status
-                  'registerTime': newRegisterTime, // Update with the new registerTime
+                  'userStatus': userStatus,
+                  'registerTime': newRegisterTime,
                   'seen': false,
                 });
 
                 Navigator.pop(context);
               },
-              child: Text('Save', style: TextStyle(color: Colors.green)),
+              child: Text('Save', style: TextStyle(color: isDarkMode ? Colors.green : Colors.green)),
             ),
           ],
         );
@@ -964,7 +957,66 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
     );
   }
 
-  // Delete functionality
+
+  Widget _buildTextField(TextEditingController controller, String label, bool isDarkMode, {TextInputType? keyboardType}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: TextField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+        ),
+        keyboardType: keyboardType,
+      ),
+    );
+  }
+
+  Widget _buildDropdown(String value, String label, List<String> items, bool isDarkMode, ValueChanged<String?> onChanged) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: DropdownButtonFormField<String>(
+        value: value,
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+        ),
+        items: items.map((String item) {
+          return DropdownMenuItem<String>(
+            value: item,
+            child: Text(
+              item,
+              style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+            ),
+          );
+        }).toList(),
+        onChanged: onChanged,
+      ),
+    );
+  }
+
+  Widget _buildDatePicker(TextEditingController controller, String label, bool isDarkMode) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: GestureDetector(
+        onTap: () {
+          _selectDateAndTime(context, controller);
+        },
+        child: AbsorbPointer(
+          child: TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              labelText: label,
+              labelStyle: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+            ),
+            keyboardType: TextInputType.datetime,
+          ),
+        ),
+      ),
+    );
+  }
+
+
   void _showDeleteConfirmationDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -975,7 +1027,7 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
+                Navigator.of(context).pop();
               },
               child: Text('Cancel',
                   style: TextStyle(color: Colors.green),
@@ -983,9 +1035,9 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
             ),
             TextButton(
               onPressed: () async {
-                // Perform the delete operation
+
                 await FirebaseFirestore.instance.collection('users').doc(selectedUserId).delete();
-                Navigator.of(context).pop(); // Close the dialog after deletion
+                Navigator.of(context).pop();
               },
               child: Text('Delete',
                   style: TextStyle(color: Colors.red),
@@ -1015,10 +1067,9 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
   final TextEditingController _walletController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _registerTimeController = TextEditingController();
-  bool seen = false; // Default value
-  String seenValue = 'False'; // Default value for dropdown
-
-  String userType = 'Student'; // Default user type
+  bool seen = false;
+  String seenValue = 'False';
+  String userType = 'Student';
 
   @override
   void initState() {
@@ -1026,17 +1077,17 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
     _fetchUserDoc();
   }
 
-  // Async method to fetch user document from Firestore
+
   Future<void> _fetchUserDoc() async {
     DocumentSnapshot userDoc = await FirebaseFirestore.instance
         .collection('users')
-        .doc('userID') // Replace with actual user ID
+        .doc('userID')
         .get();
 
     if (userDoc.exists) {
       setState(() {
         seen = userDoc['seen'] ?? false;
-        seenValue = seen ? 'True' : 'False'; // Set the string value for dropdown
+        seenValue = seen ? 'True' : 'False';
       });
     }
   }
@@ -1114,12 +1165,12 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
             TextField(
               controller: _passwordController,
               decoration: InputDecoration(labelText: 'Password'),
-              obscureText: true, // Hide password text
+              obscureText: true,
             ),
             SizedBox(height: 8.0),
             GestureDetector(
               onTap: () {
-                _selectDateAndTime(context, _registerTimeController); // Open both date and time pickers
+                _selectDateAndTime(context, _registerTimeController);
               },
               child: AbsorbPointer(
                 child: TextField(
@@ -1131,7 +1182,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
             ),
             SizedBox(height: 8.0),
             DropdownButtonFormField<String>(
-              value: seenValue, // Set the value to 'True' or 'False' string
+              value: seenValue,
               items: [
                 DropdownMenuItem(value: 'True', child: Text('True', style: TextStyle(color: isDarkMode ? Colors.white : Colors.black,)),
                 ),
@@ -1140,9 +1191,9 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
               ],
               onChanged: (value) {
                 setState(() {
-                  // Convert the selected string value back to a boolean
-                  seen = value == 'True'; // 'True' -> true, 'False' -> false
-                  // Update your Firestore document with the new 'seen' value (if necessary)
+
+                  seen = value == 'True';
+
                 });
               },
               decoration: InputDecoration(labelText: 'Seen'),
@@ -1154,7 +1205,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
       actions: [
         TextButton(
           onPressed: () {
-            Navigator.of(context).pop(); // Close the dialog
+            Navigator.of(context).pop();
           },
           child: Text(
             'Cancel',
@@ -1172,9 +1223,9 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
     );
   }
 
-  // Function to handle date and time selection
+
   void _selectDateAndTime(BuildContext context, TextEditingController controller) async {
-    // Show date picker first
+
     final DateTime? selectedDate = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
@@ -1183,14 +1234,14 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
     );
 
     if (selectedDate != null) {
-      // Show time picker if a date was selected
+
       final TimeOfDay? selectedTime = await showTimePicker(
         context: context,
-        initialTime: TimeOfDay.fromDateTime(DateTime.now()), // Set current time as default
+        initialTime: TimeOfDay.fromDateTime(DateTime.now()),
       );
 
       if (selectedTime != null) {
-        // Combine selected date and time
+
         final DateTime combinedDateTime = DateTime(
           selectedDate.year,
           selectedDate.month,
@@ -1199,14 +1250,14 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
           selectedTime.minute,
         );
 
-        // Format the combined date and time as "yyyy-MM-dd HH:mm"
+
         String formattedDateTime = "${combinedDateTime.toLocal().year.toString().padLeft(4, '0')}-${(combinedDateTime.month).toString().padLeft(2, '0')}-${(combinedDateTime.day).toString().padLeft(2, '0')} ${combinedDateTime.hour.toString().padLeft(2, '0')}:${combinedDateTime.minute.toString().padLeft(2, '0')}";
         controller.text = formattedDateTime;
       }
     }
   }
 
-  // Save user function
+
   void _saveUser() async {
     String firstName = _firstNameController.text.trim();
     String lastName = _lastNameController.text.trim();
@@ -1218,7 +1269,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
     String wallet = _walletController.text.trim();
     String password = _passwordController.text.trim();
     String registerTimeString = _registerTimeController.text.trim();
-    DateTime registerTimeDateTime = DateTime.parse(registerTimeString); // Parse the string to DateTime
+    DateTime registerTimeDateTime = DateTime.parse(registerTimeString);
     Timestamp registerTimeTimestamp = Timestamp.fromDate(registerTimeDateTime);
 
     if (firstName.isNotEmpty && email.isNotEmpty && password.isNotEmpty) {
@@ -1232,13 +1283,13 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
         'userID': userID,
         'userType': userType,
         'wallet': wallet,
-        'userStatus': 'Active', // Default status
+        'userStatus': 'Active',
         'lastLogin': DateTime.now().toIso8601String(),
         'registerTime': FieldValue.serverTimestamp(),
-        'seen': seen, // Correctly store the 'seen' value
+        'seen': seen,
       });
 
-      Navigator.of(context).pop(); // Close the dialog after saving
+      Navigator.of(context).pop();
     }
   }
 }
