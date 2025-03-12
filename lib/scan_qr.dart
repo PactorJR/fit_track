@@ -11,7 +11,12 @@ import 'theme_provider.dart';
 import 'package:provider/provider.dart';
 import 'home_page.dart';
 import 'home_page_admin.dart';
-import 'login.dart';
+import 'package:mailer/mailer.dart';
+import 'package:mailer/smtp_server.dart';
+import 'package:flutter/services.dart';
+import 'dart:math';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 
 
 class ScanPage extends StatefulWidget {
@@ -30,6 +35,11 @@ class _QRScannerState extends State<ScanPage> {
   late WebViewController _webViewController;
   User? currentUser = FirebaseAuth.instance.currentUser;
   Timer? _resetTimer;
+  String? _authCode;
+  DateTime? _lastSentTime;
+  TextEditingController? codeController = TextEditingController();
+  bool canResend = true;
+
 
   @override
   void reassemble() {
@@ -115,6 +125,9 @@ class _QRScannerState extends State<ScanPage> {
               backgroundColor: isDarkMode ? Colors.grey : Colors.green,
               onPressed: () {
                 Navigator.pop(context);
+                _controller?.dispose();
+                _debounce?.cancel();
+                _controller?.pauseCamera();
               },
               child: Icon(Icons.arrow_back, color: Colors.white),
             ),
@@ -124,8 +137,7 @@ class _QRScannerState extends State<ScanPage> {
     );
   }
 
-  Future<void> _handleLogin(User user, String firstName,
-      String lastName) async {
+  Future<void> _handleLogin(User user, String firstName, String lastName) async {
     DocumentSnapshot userDoc = await FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
@@ -152,13 +164,138 @@ class _QRScannerState extends State<ScanPage> {
       if (!loggedOut) {
         _showSnackbar("You are already logged in!");
         return;
-      } else {
-        await _processLogin(user, actualUserID, firstName, lastName);
       }
-    } else {
-      await _processLogin(user, actualUserID, firstName, lastName);
     }
+
+    _authCode = _generateAuthCode();
+    _lastSentTime = DateTime.now();
+    await _sendEmail(user.email!, _authCode!);
+    _showAuthDialog(context, user, actualUserID, firstName, lastName);
   }
+
+
+  void _showAuthDialog(BuildContext context, User user, String userID, String firstName, String lastName) {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    bool isDarkMode = themeProvider.isDarkMode;
+
+    _controller?.dispose();
+    _debounce?.cancel();
+    _controller?.pauseCamera();
+
+    TextEditingController codeController = TextEditingController();
+    bool canResend = true;
+    int remainingTime = 60;
+    Timer? countdownTimer;
+
+    void startCountdown() {
+      countdownTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+        if (remainingTime > 0) {
+          setState(() {
+            remainingTime--;
+          });
+        } else {
+          setState(() {
+            canResend = true;
+          });
+          countdownTimer?.cancel();
+        }
+      });
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: isDarkMode ? Colors.white : Colors.black,
+              title: Text(
+                "Enter OTP",
+                style: TextStyle(color: isDarkMode ? Colors.black : Colors.white),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: codeController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: InputDecoration(
+                      hintText: "Enter 6-digit OTP",
+                      hintStyle: TextStyle(color: isDarkMode ? Colors.grey : Colors.black54),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: isDarkMode ? Colors.grey : Colors.black),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: isDarkMode ? Colors.green : Colors.blue),
+                      ),
+                    ),
+                    style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                  ),
+                  SizedBox(height: 10),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: canResend
+                            ? () async {
+                          setState(() {
+                            canResend = false;
+                            remainingTime = 60;
+                          });
+                          _authCode = _generateAuthCode();
+                          _lastSentTime = DateTime.now();
+                          await _sendEmail(user.email!, _authCode!);
+                          startCountdown();
+                        }
+                            : null,
+                        child: Text(
+                          "Resend OTP",
+                          style: TextStyle(color: isDarkMode ? Colors.black : Colors.green),
+                        ),
+                      ),
+                      SizedBox(width: 10),
+                      Text(
+                        canResend ? "" : "Retry in $remainingTime sec",
+                        style: TextStyle(fontSize: 14, color: isDarkMode ? Colors.grey[500] : Colors.grey),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  child: Text(
+                    "Cancel",
+                    style: TextStyle(color: isDarkMode ? Colors.black : Colors.green),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    if (codeController.text == _authCode) {
+                      Navigator.pop(context);
+                      _processLogin(user, userID, firstName, lastName);
+                    } else {
+                      _showSnackbar("Incorrect OTP. Try again.");
+                    }
+                  },
+                  child: Text(
+                    "Verify",
+                    style: TextStyle(color: isDarkMode ? Colors.black : Colors.green),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+
 
   void _showSnackbar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -168,6 +305,31 @@ class _QRScannerState extends State<ScanPage> {
         duration: Duration(seconds: 2),
       ),
     );
+  }
+
+  Future<void> _sendEmail(String email, String otp) async {
+    final smtpServer = gmail('jr.pactor@cvsu.edu.ph', 'ncfhexuxtmhynjay');
+
+    final message = Message()
+      ..from = Address('FitTrackCCAT@gmail.com', 'FitTrack')
+      ..recipients.add(email)
+      ..subject = 'Your One-Time Password'
+      ..text = 'Your one-time password is: $otp';
+
+    try {
+      await send(message, smtpServer);
+      print("Email sent successfully.");
+    } catch (e) {
+      print("Failed to send email: $e");
+    }
+  }
+
+  String _generateAuthCode() {
+    final randomBytes = List<int>.generate(6, (i) => Random.secure().nextInt(256));
+    final hash = sha256.convert(randomBytes);
+    final otp = (int.parse(hash.toString().substring(0, 6), radix: 16) % 900000) + 100000;
+    print(otp);
+    return otp.toString();
   }
 
   Future<void> _processLogin(User user, String actualUserID, String firstName,
@@ -330,6 +492,7 @@ class _QRScannerState extends State<ScanPage> {
             await _launchURL(context, link);
             qrHandled = true;
             shouldNavigate = true;
+            print("navigating to launchurl");
           } else {
             QuerySnapshot guestSnapshot = await FirebaseFirestore.instance
                 .collection('guests')
@@ -376,6 +539,8 @@ class _QRScannerState extends State<ScanPage> {
         if (shouldNavigate) {
           if (userType == 'Admin') {
             _controller?.dispose();
+            _debounce?.cancel();
+            _controller?.pauseCamera();
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
@@ -384,6 +549,8 @@ class _QRScannerState extends State<ScanPage> {
             );
           } else {
             _controller?.dispose();
+            _debounce?.cancel();
+            _controller?.pauseCamera();
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -610,7 +777,24 @@ class _QRScannerState extends State<ScanPage> {
           'userID': actualUserID,
         });
 
-        await _proceedToSignOut();
+        bool shouldSignOut = await showLogoutConfirmationDialog();
+        if (shouldSignOut) {
+          await _proceedToSignOut();
+        } else {
+          _controller?.dispose();
+          _debounce?.cancel();
+          _controller?.pauseCamera();
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  MyHomePage(
+                    title: 'Home',
+                    cameFromScanPage: true,
+                  ),
+            ),
+          );
+        }
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -629,9 +813,33 @@ class _QRScannerState extends State<ScanPage> {
     }
   }
 
+  Future<bool> showLogoutConfirmationDialog() async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Logout Confirmation'),
+          content: Text('Do you want to log out from the app as well?'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text('No'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text('Yes'),
+            ),
+          ],
+        );
+      },
+    ) ?? false; // Default to false if dialog is dismissed
+  }
+
   Future<void> _proceedToSignOut() async {
     await FirebaseAuth.instance.signOut();
-
+    _controller?.dispose();
+    _debounce?.cancel();
+    _controller?.pauseCamera();
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => LoginPage()),
@@ -645,44 +853,15 @@ class _QRScannerState extends State<ScanPage> {
         .get();
 
     if (snapshot.docs.isNotEmpty) {
-      String link = snapshot.docs.first['equipLink'];
+      var doc = snapshot.docs.first;
+      String link = doc['equipLink'];
+      String title = doc['equipTitle'];
 
-      final Uri _url = Uri.parse(link);
-      if (await canLaunchUrl(_url)) {
-        await launchUrl(
-          _url,
-          mode: LaunchMode.externalApplication,
-        );
-      } else {
-        final controller = WebViewController()
-          ..setJavaScriptMode(JavaScriptMode.unrestricted)
-          ..setNavigationDelegate(
-            NavigationDelegate(
-              onProgress: (int progress) {},
-              onPageStarted: (String url) {},
-              onPageFinished: (String url) {},
-              onHttpError: (HttpResponseError error) {},
-              onWebResourceError: (WebResourceError error) {},
-              onNavigationRequest: (NavigationRequest request) {
-                if (request.url.startsWith('https://youtube.com/')) {
-                  return NavigationDecision.prevent;
-                }
-                return NavigationDecision.navigate;
-              },
-            ),
-          )
-          ..loadRequest(Uri.parse(link));
-
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) =>
-                Scaffold(
-                  appBar: AppBar(title: Text("FitTrack WebViewer")),
-                  body: WebViewWidget(controller: controller),
-                ),
-          ),
-        );
-      }
+      // Use post-frame callback to ensure dialog is displayed after the current frame
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showWorkoutDialog(context, title, link);
+        print("navigating to _showWorkoutDialog");
+      });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -695,6 +874,152 @@ class _QRScannerState extends State<ScanPage> {
       );
     }
   }
+
+  void _showWorkoutDialog(BuildContext context, String title, String link) {
+    Map<String, List<String>> titleToGifs = {
+      "Abs": [
+        "assets/workouts/Abs1.gif",
+        "assets/workouts/Abs2.gif",
+        "assets/workouts/Abs3.gif",
+      ],
+      "Arms": [
+        "assets/workouts/Arms1.gif",
+        "assets/workouts/Arms2.gif",
+        "assets/workouts/Arms3.gif",
+      ],
+      "Cardio": [
+        "assets/workouts/Cardio1.gif",
+        "assets/workouts/Cardio2.gif",
+      ],
+      "Chest": [
+        "assets/workouts/Chest1.gif",
+        "assets/workouts/Chest2.gif",
+        "assets/workouts/Chest3.gif",
+      ],
+      "Back": [
+        "assets/workouts/Back1.gif",
+        "assets/workouts/Back2.gif",
+      ],
+    };
+
+    List<String> gifs = titleToGifs[title] ?? [];
+    String previewGif = gifs.isNotEmpty ? gifs[0] : ""; // Initialize preview with the first gif
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(title, textAlign: TextAlign.center),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Large preview area
+                  previewGif.isNotEmpty
+                      ? GestureDetector(
+                    onTap: () {
+                      // Optionally, you can add logic here to enlarge the gif preview
+                    },
+                    child: Image.asset(
+                      previewGif,
+                      height: 200,
+                      width: 200,
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                      : Container(),
+                  SizedBox(height: 12),
+
+                  // Small circle buttons for each GIF
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: gifs.map((gif) {
+                        return GestureDetector(
+                          onTap: () {
+                            // Update the preview to the selected gif
+                            setState(() {
+                              previewGif = gif;
+                            });
+                          },
+                          child: Container(
+                            margin: EdgeInsets.symmetric(horizontal: 8),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: previewGif == gif
+                                  ? Border.all(color: Colors.green, width: 2)  // Green border if selected
+                                  : Border.all(color: Colors.transparent),     // Transparent border if not selected
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4.0),
+                              child: ClipOval( // Ensures GIF remains circular, even without border
+                                child: Image.asset(
+                                  gif,
+                                  width: 50,
+                                  height: 50,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context); // Close dialog first
+                      _openLink(context, link); // Then navigate
+                    },
+                    child: Text("Go to Video", style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text("Close"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+
+  Widget _gifButton(BuildContext context, String assetPath) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Image.asset(assetPath, height: 100, fit: BoxFit.cover),
+    );
+  }
+
+
+
+  void _openLink(BuildContext context, String link) async {
+    final Uri _url = Uri.parse(link);
+    if (await canLaunchUrl(_url)) {
+      await launchUrl(_url, mode: LaunchMode.externalApplication);
+    } else {
+      final controller = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..loadRequest(Uri.parse(link));
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => Scaffold(
+            appBar: AppBar(title: Text("FitTrack WebViewer")),
+            body: WebViewWidget(controller: controller),
+          ),
+        ),
+      );
+    }
+  }
+
 
   Future<void> _handleAmountAddition(String code, User user,
       String userType) async {

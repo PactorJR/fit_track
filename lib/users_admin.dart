@@ -5,6 +5,7 @@ import 'firebase_options.dart';
 import 'package:intl/intl.dart';
 import 'theme_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,6 +43,17 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
     if (selectedUserId != null) {
       _selectUser(selectedUserId!);
     }
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.landscapeRight,
+      DeviceOrientation.landscapeLeft,
+    ]);
+  }
+
+  @override
+  void dispose() {
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    super.dispose();
   }
 
   void _selectUser(String userId) {
@@ -73,6 +85,12 @@ class _UsersAdminPageState extends State<UsersAdminPage> {
 
 @override
 Widget build(BuildContext context) {
+  Orientation orientation = MediaQuery.of(context).orientation;
+
+
+  double containerWidth = orientation == Orientation.portrait
+      ? 600
+      : 1000;
   final themeProvider = Provider.of<ThemeProvider>(context);
   bool isDarkMode = Provider.of<ThemeProvider>(context).isDarkMode;
   return Scaffold(
@@ -115,103 +133,101 @@ Widget build(BuildContext context) {
             ),
           ),
         ),
-        Center(
+  Padding(
+  padding: const EdgeInsets.only(top: 100),
+        child: Center(
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: SingleChildScrollView(
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: 600),
+                constraints: BoxConstraints(maxWidth: 800),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Builder(
-                      builder: (context) {
-                        double devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
-                        double screenWidth = MediaQuery.of(context).size.width;
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 1,
+                          child: Builder(
+                            builder: (context) {
+                              double devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+                              double screenWidth = MediaQuery.of(context).size.width;
+                              double borderWidth = (screenWidth <= 320 || devicePixelRatio < 2.0) ? 0.1 : 0.3;
+                              double borderHeight = (screenWidth <= 320 || devicePixelRatio < 2.0) ? 0.1 : 0.3;
+                              double fontSize = (screenWidth <= 320 || devicePixelRatio < 2.0) ? 14.0 : 16.0;
 
-                        double borderWidth = (screenWidth <= 320 || devicePixelRatio < 2.0) ? 0.1 : 0.3;
-                        double borderHeight = (screenWidth <= 320 || devicePixelRatio < 2.0) ? 0.1 : 0.3;
-                        double paddingSize = (screenWidth <= 320 || devicePixelRatio < 2.0) ? 2.0 : 4.0;
-                        double fontSize = (screenWidth <= 320 || devicePixelRatio < 2.0) ? 14.0 : 16.0;
-
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 16.0),
-                          child: TextField(
-                            controller: searchController,
-                            decoration: InputDecoration(
-                              labelText: 'Search Users',
-                              hintText: 'Enter name or email',
-                              prefixIcon: Icon(Icons.search),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8.0),
-                                borderSide: BorderSide(
-                                  width: borderWidth,
-                                  style: BorderStyle.solid,
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 16.0, right: 8.0),
+                                child: TextField(
+                                  controller: searchController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Search Users',
+                                    hintText: 'Enter name or email',
+                                    prefixIcon: Icon(Icons.search),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8.0),
+                                      borderSide: BorderSide(width: borderWidth, style: BorderStyle.solid),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderSide: BorderSide(color: Colors.green, width: borderWidth, style: BorderStyle.solid),
+                                      borderRadius: BorderRadius.circular(8.0),
+                                    ),
+                                    focusedErrorBorder: OutlineInputBorder(
+                                      borderSide: BorderSide(color: Colors.red, width: borderHeight, style: BorderStyle.solid),
+                                      borderRadius: BorderRadius.circular(8.0),
+                                    ),
+                                  ),
+                                  style: TextStyle(fontSize: fontSize),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      searchTerm = value.toLowerCase();
+                                    });
+                                  },
                                 ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderSide: BorderSide(
-                                  color: Colors.green,
-                                  width: borderWidth,
-                                  style: BorderStyle.solid,
-                                ),
-                                borderRadius: BorderRadius.circular(8.0),
-                              ),
-                              focusedErrorBorder: OutlineInputBorder(
-                                borderSide: BorderSide(
-                                  color: Colors.red,
-                                  width: borderHeight,
-                                  style: BorderStyle.solid,
-                                ),
-                                borderRadius: BorderRadius.circular(8.0),
-                              ),
-                            ),
-                            style: TextStyle(fontSize: fontSize),
-                            onChanged: (value) {
-                              setState(() {
-                                searchTerm = value.toLowerCase();
-                              });
+                              );
                             },
                           ),
-                        );
-                      },
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 16.0),
-                      child: DropdownButtonFormField<String>(
-                        value: selectedUserType,
-                        decoration: InputDecoration(
-                          labelText: 'Filter by User Type',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8.0),
+                        ),
+                        Expanded(
+                          flex: 1,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 16.0, left: 8.0),
+                            child: DropdownButtonFormField<String>(
+                              value: selectedUserType,
+                              decoration: InputDecoration(
+                                labelText: 'Filter by User Type',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8.0),
+                                ),
+                              ),
+                              items: ['All', 'Faculty', 'Student', 'Admin'].map((String type) {
+                                return DropdownMenuItem<String>(
+                                  value: type,
+                                  child: Text(
+                                    type,
+                                    style: TextStyle(
+                                      color: themeProvider.isDarkMode ? Colors.white : Colors.black,
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (newValue) {
+                                setState(() {
+                                  selectedUserType = newValue!;
+                                });
+                              },
+                            ),
                           ),
                         ),
-                        items: ['All', 'Faculty', 'Student', 'Admin'].map((String type) {
-                          return DropdownMenuItem<String>(
-                            value: type,
-                            child: Text(
-                              type,
-                              style: TextStyle(
-                                color: themeProvider.isDarkMode
-                                    ? Colors.white
-                                    : Colors.black,
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (newValue) {
-                          setState(() {
-                            selectedUserType = newValue!;
-                          });
-                        },
-                      ),
+                      ],
                     ),
                     Container(
+                      width: containerWidth,
                       decoration: BoxDecoration(
                         color: isDarkMode ? Colors.black38 : Colors.white,
                         borderRadius: BorderRadius.circular(16.0),
                         border: Border.all(
-                          color: Colors.black,
+                          color: Colors.green,
                           width: 2.0,
                         ),
                       ),
@@ -630,165 +646,6 @@ Widget build(BuildContext context) {
                               ),
                             ),
                             SizedBox(height: 16),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Builder(
-                                  builder: (context) {
-
-                                    double devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
-                                    double screenWidth = MediaQuery.of(context).size.width;
-
-
-                                    double fontSize = (screenWidth <= 359 || devicePixelRatio < 2.0) ? 13.0 : 10.0;
-                                    double verticalPadding = (screenWidth <= 359 || devicePixelRatio < 2.0) ? 5.0 : 7.0;
-                                    double horizontalPadding = (screenWidth <= 359 || devicePixelRatio < 2.0) ? 6.0 : 8.0;
-
-                                    return Center(
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-
-                                          Container(
-                                            padding: EdgeInsets.symmetric(
-                                              vertical: verticalPadding,
-                                              horizontal: horizontalPadding,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.yellow,
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            child: Text(
-                                              'On Approval Users',
-                                              style: TextStyle(
-                                                color: Colors.black,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: fontSize,
-                                              ),
-                                            ),
-                                          ),
-                                          SizedBox(width: 16),
-
-                                          Container(
-                                            padding: EdgeInsets.symmetric(
-                                              vertical: verticalPadding,
-                                              horizontal: horizontalPadding,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.red,
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            child: Text(
-                                              'Banned Users',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: fontSize,
-                                              ),
-                                            ),
-                                          ),
-                                          SizedBox(width: 16),
-                                          Container(
-                                            padding: EdgeInsets.symmetric(
-                                              vertical: verticalPadding,
-                                              horizontal: horizontalPadding,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.green,
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            child: Text(
-                                              'Active Users',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: fontSize,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 16),
-                            Builder(
-                              builder: (context) {
-
-                                double devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
-                                double screenWidth = MediaQuery.of(context).size.width;
-
-
-                                double buttonFontSize = (screenWidth <= 320 || devicePixelRatio < 2.0) ? 12.0 : 14.0;
-                                double iconSize = (screenWidth <= 320 || devicePixelRatio < 2.0) ? 20.0 : 24.0;
-                                double paddingSize = (screenWidth <= 320 || devicePixelRatio < 2.0) ? 8.0 : 12.0;
-
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 0.0),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                    children: [
-                                      ElevatedButton(
-                                        onPressed: _createUser,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: isDarkMode ? Colors.white : Colors.white,
-                                          padding: EdgeInsets.symmetric(horizontal: paddingSize),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.add, color: isDarkMode ? Colors.green : Colors.green, size: iconSize),
-                                            SizedBox(width: 8),
-                                            Text(
-                                              'Create',
-                                              style: TextStyle(color: isDarkMode ? Colors.green : Colors.green, fontSize: buttonFontSize),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      ElevatedButton(
-                                        onPressed: selectedUserId?.isNotEmpty ?? false ? () => _editUser(context) : null,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: selectedUserId?.isNotEmpty ?? false ? (isDarkMode ? Colors.white : Colors.white) : (isDarkMode ? Colors.black.withOpacity(0.7) : Colors.grey.withOpacity(0.7)),
-                                          padding: EdgeInsets.symmetric(horizontal: paddingSize),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.edit, color: selectedUserId?.isNotEmpty ?? false ? (isDarkMode ? Colors.blue : Colors.blue) : Colors.blue, size: iconSize),
-                                            SizedBox(width: 8),
-                                            Text(
-                                              'Edit',
-                                              style: TextStyle(color: selectedUserId?.isNotEmpty ?? false ? (isDarkMode ? Colors.blue : Colors.blue) : Colors.blue, fontSize: buttonFontSize),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      ElevatedButton(
-                                        onPressed: selectedUserId?.isNotEmpty ?? false ? () => _showDeleteConfirmationDialog(context) : null,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: selectedUserId?.isNotEmpty ?? false ? Colors.white : Colors.black.withOpacity(0.7),
-                                          padding: EdgeInsets.symmetric(horizontal: paddingSize),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.delete, color: Colors.red, size: iconSize),
-                                            SizedBox(width: 8),
-                                            Text(
-                                              'Delete',
-                                              style: TextStyle(color: Colors.red, fontSize: buttonFontSize),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
                           ],
                         ),
                       ),
@@ -800,6 +657,7 @@ Widget build(BuildContext context) {
 
           ),
           ),
+  ),
 
           Positioned(
             top: 20,
@@ -818,8 +676,54 @@ Widget build(BuildContext context) {
           ),
         ],
       ),
-    );
-  }
+    bottomNavigationBar: BottomNavigationBar(
+      type: BottomNavigationBarType.fixed,
+      backgroundColor: isDarkMode ? Colors.black : Colors.white,
+      selectedItemColor: Colors.green,
+      unselectedItemColor: Colors.grey,
+      selectedLabelStyle: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+      unselectedLabelStyle: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+      items: <BottomNavigationBarItem>[
+        const BottomNavigationBarItem(
+          icon: Icon(Icons.add),
+          label: 'Create',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(
+            Icons.edit,
+            color: (selectedUserId?.isNotEmpty ?? false) ? Colors.blue : Colors.grey,
+          ),
+          label: 'Edit',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(
+            Icons.delete,
+            color: (selectedUserId?.isNotEmpty ?? false) ? Colors.red : Colors.grey,
+          ),
+          label: 'Delete',
+        ),
+      ],
+      onTap: (int index) {
+        switch (index) {
+          case 0:
+            _createUser();
+            break;
+          case 1:
+            if (selectedUserId?.isNotEmpty ?? false) {
+              _editUser(context);
+            }
+            break;
+          case 2:
+            if (selectedUserId?.isNotEmpty ?? false) {
+              _showDeleteConfirmationDialog(context);
+            }
+            break;
+        }
+      },
+    ),
+  );
+}
+
 
 
   void _createUser() {

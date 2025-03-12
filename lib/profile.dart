@@ -124,8 +124,6 @@ class _ProfilePageState extends State<ProfilePage> {
         text: _userData?.get('firstName') ?? '');
     final TextEditingController lastNameController = TextEditingController(
         text: _userData?.get('lastName') ?? '');
-    final TextEditingController emailController = TextEditingController(
-        text: _userData?.get('email') ?? '');
     final TextEditingController phoneController = TextEditingController(
         text: (_userData?.get('phone')?.toString() ?? ''));
     final TextEditingController ageController = TextEditingController(
@@ -156,11 +154,6 @@ class _ProfilePageState extends State<ProfilePage> {
                       decoration: InputDecoration(labelText: 'Last Name'),
                     ),
                     SizedBox(height: 8.0),
-                    TextField(
-                      controller: emailController,
-                      decoration: InputDecoration(labelText: 'E-mail'),
-                      keyboardType: TextInputType.emailAddress,
-                    ),
                     SizedBox(height: 8.0),
                     TextField(
                       controller: phoneController,
@@ -264,7 +257,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     Map<String, dynamic> updates = {
                       'firstName': firstNameController.text,
                       'lastName': lastNameController.text,
-                      'email': emailController.text,
                       'phone': phoneController.text,
                       'age': ageController.text,
                       'birthday': birthdayController.text,
@@ -303,6 +295,218 @@ class _ProfilePageState extends State<ProfilePage> {
         );
       },
     );
+  }
+
+  Future<bool> showChangePasswordDialog(BuildContext context) async {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    bool isDarkMode = themeProvider.isDarkMode;
+
+    TextEditingController currentPasswordController = TextEditingController();
+    TextEditingController newPasswordController = TextEditingController();
+    TextEditingController confirmPasswordController = TextEditingController();
+
+    User? user = FirebaseAuth.instance.currentUser;
+
+    return await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: isDarkMode ? Colors.white : Colors.white,
+          title: Text(
+            'Change Password',
+            style: TextStyle(color: isDarkMode ? Colors.black : Colors.green),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: currentPasswordController,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'Current Password',
+                  labelStyle: TextStyle(color: isDarkMode ? Colors.black : Colors.black),
+                  border: OutlineInputBorder(),
+                ),
+                style: TextStyle(color: isDarkMode ? Colors.black : Colors.black),
+              ),
+              SizedBox(height: 10),
+              TextField(
+                controller: newPasswordController,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'New Password',
+                  labelStyle: TextStyle(color: isDarkMode ? Colors.black : Colors.black),
+                  border: OutlineInputBorder(),
+                ),
+                style: TextStyle(color: isDarkMode ? Colors.black : Colors.black),
+              ),
+              SizedBox(height: 10),
+              TextField(
+                controller: confirmPasswordController,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'Confirm New Password',
+                  labelStyle: TextStyle(color: isDarkMode ? Colors.black : Colors.black),
+                  border: OutlineInputBorder(),
+                ),
+                style: TextStyle(color: isDarkMode ? Colors.black : Colors.black),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: isDarkMode ? Colors.green : Colors.green),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isDarkMode ? Colors.green : Colors.green,
+              ),
+              onPressed: () async {
+                if (newPasswordController.text != confirmPasswordController.text) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('New passwords do not match!')),
+                  );
+                  return;
+                }
+
+                try {
+                  AuthCredential credential = EmailAuthProvider.credential(
+                    email: user!.email!,
+                    password: currentPasswordController.text.trim(),
+                  );
+                  await user.reauthenticateWithCredential(credential);
+                  await user.updatePassword(newPasswordController.text.trim());
+
+                  Navigator.pop(context, true);
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Password changed successfully!')),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: ${e.toString()}')),
+                  );
+                }
+              },
+              child: Text('Change Password', style: TextStyle(color: isDarkMode ? Colors.black : Colors.white)),
+            ),
+          ],
+        );
+      },
+    ) ??
+        false;
+  }
+
+
+  Future<bool> showChangeEmailDialog(BuildContext context) async {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    bool isDarkMode = themeProvider.isDarkMode;
+
+    TextEditingController currentEmailController = TextEditingController();
+    TextEditingController currentPasswordController = TextEditingController();
+    TextEditingController newEmailController = TextEditingController();
+
+    User? user = FirebaseAuth.instance.currentUser;
+
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: isDarkMode ? Colors.black : Colors.white,
+          title: Text(
+            'Change Email',
+            style: TextStyle(color: isDarkMode ? Colors.white : Colors.green),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: currentEmailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  labelText: 'Current Email Address',
+                  labelStyle: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                  border: OutlineInputBorder(),
+                ),
+                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+              ),
+              SizedBox(height: 10),
+              TextField(
+                controller: currentPasswordController,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'Current Password',
+                  labelStyle: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                  border: OutlineInputBorder(),
+                ),
+                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+              ),
+              SizedBox(height: 10),
+              TextField(
+                controller: newEmailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  labelText: 'New Email Address',
+                  labelStyle: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                  border: OutlineInputBorder(),
+                ),
+                style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: isDarkMode ? Colors.green : Colors.green),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isDarkMode ? Colors.green : Colors.green,
+              ),
+              onPressed: () async {
+                if (currentEmailController.text.isEmpty ||
+                    currentPasswordController.text.isEmpty ||
+                    newEmailController.text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Please fill in all fields!')),
+                  );
+                  return;
+                }
+
+                try {
+                  AuthCredential credential = EmailAuthProvider.credential(
+                    email: currentEmailController.text.trim(),
+                    password: currentPasswordController.text.trim(),
+                  );
+                  await user!.reauthenticateWithCredential(credential);
+
+                  await user.updateEmail(newEmailController.text.trim());
+
+                  Navigator.pop(context, true);
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Email changed successfully!')),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: ${e.toString()}')),
+                  );
+                }
+              },
+              child: Text('Change Email', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    ) ??
+        false;
   }
 
   @override
@@ -361,7 +565,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     child: Container(
                       padding: EdgeInsets.all(16.0),
                       decoration: BoxDecoration(
-                        color: isDarkMode ? Colors.black : Colors.green.shade800
+                        color: isDarkMode ? Colors.black38 : Colors.green.shade800
                             .withOpacity(0.8),
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
@@ -385,22 +589,17 @@ class _ProfilePageState extends State<ProfilePage> {
                                     ? FileImage(File(_image!.path))
                                     : (_userData?.get('profileImage') != null &&
                                     _userData!.get('profileImage').isNotEmpty
-                                    ? NetworkImage(_userData!.get(
-                                    'profileImage'))
+                                    ? NetworkImage(_userData!.get('profileImage'))
                                     : AssetImage(
-                                    'assets/images/Icon${_selectedIconIndex !=
-                                        null
-                                        ? _selectedIconIndex! + 1
-                                        : 1}.png') as ImageProvider),
+                                    'assets/images/Icon${_selectedIconIndex != null ? _selectedIconIndex! + 1 : 1}.png')
+                                as ImageProvider),
                                 child: null,
                               ),
                               Positioned(
                                 bottom: screenWidth <= 409 ? 0 : 0,
                                 right: screenWidth <= 409 ? 0 : 0,
                                 child: CircleAvatar(
-                                  backgroundColor: isDarkMode
-                                      ? Colors.black
-                                      : Colors.green.shade800,
+                                  backgroundColor: isDarkMode ? Colors.black : Colors.green.shade800,
                                   radius: screenWidth <= 409 ? 15 : 18,
                                   child: IconButton(
                                     icon: Icon(Icons.edit, size: screenWidth <= 409 ? 15 : 20,
@@ -416,14 +615,12 @@ class _ProfilePageState extends State<ProfilePage> {
                           SizedBox(height: 20),
                           ProfileItem(
                             icon: Icons.person,
-                            label: 'First Name: ${_userData?.get('firstName') ??
-                                'Not available'}',
+                            label: 'First Name: ${_userData?.get('firstName') ?? 'Not available'}',
                           ),
                           SizedBox(height: screenWidth <= 409 ? 8 : 10),
                           ProfileItem(
                             icon: Icons.person_outline,
-                            label: 'Last Name: ${_userData?.get('lastName') ??
-                                'Not available'}',
+                            label: 'Last Name: ${_userData?.get('lastName') ?? 'Not available'}',
                           ),
                           SizedBox(height: screenWidth <= 409 ? 8 : 10),
                           ProfileItem(
@@ -433,8 +630,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           SizedBox(height: screenWidth <= 409 ? 8 : 10),
                           ProfileItem(
                             icon: Icons.phone,
-                            label: 'Mobile Number: ${_userData?.get('phone') ??
-                                'Not available'}',
+                            label: 'Mobile Number: ${_userData?.get('phone') ?? 'Not available'}',
                           ),
                           SizedBox(height: screenWidth <= 409 ? 8 : 10),
                           ProfileItem(
@@ -445,6 +641,43 @@ class _ProfilePageState extends State<ProfilePage> {
                           ProfileItem(
                             icon: Icons.timer,
                             label: 'Age: ${_userData?.get('age') ?? 'Not available'}',
+                          ),
+                          SizedBox(height: screenWidth <= 409 ? 8 : 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  showChangePasswordDialog(context);
+                                },
+                                icon: Icon(Icons.lock),
+                                label: Text('Change Password'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: isDarkMode ? Colors.grey : Colors.green.shade800,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                ),
+                              ),
+                              SizedBox(width: 10),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  showChangeEmailDialog(context);
+                                },
+                                icon: Icon(Icons.email),
+                                label: Text('Change Email'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: isDarkMode ? Colors.grey.shade400 : Colors.green.shade800,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                ),
+                              ),
+                            ],
                           ),
                           SizedBox(height: screenWidth <= 409 ? 60 : 80),
                         ],
@@ -479,6 +712,8 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 }
+
+
 
   class ProfileItem extends StatelessWidget {
   final IconData icon;

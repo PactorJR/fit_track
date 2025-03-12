@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
 import 'theme_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +40,17 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
     if (selectedUserId != null) {
       _selectUser(selectedUserId!);
     }
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.landscapeRight,
+      DeviceOrientation.landscapeLeft,
+    ]);
+  }
+
+  @override
+  void dispose() {
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    super.dispose();
   }
 
   void _selectUser(String userId) {
@@ -154,6 +166,15 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
 
 
   Widget build(BuildContext context) {
+    Orientation orientation = MediaQuery.of(context).orientation;
+
+
+    double containerWidth = orientation == Orientation.portrait
+        ? 600
+        : 1000;
+    double tableWidth = orientation == Orientation.portrait
+        ? 120
+        : 200;
     final themeProvider = Provider.of<ThemeProvider>(context);
     bool isDarkMode = themeProvider.isDarkMode;
     return Scaffold(
@@ -197,21 +218,27 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
               ),
             ),
           ),
-          Center(
+            Padding(
+            padding: const EdgeInsets.only(top: 100),
+            child: Center(
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: 600),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
+            padding: const EdgeInsets.all(16.0),
+            child: SingleChildScrollView(
+            child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 800),
+            child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+            Container(
+            width: containerWidth,
                       height: 600,
                       decoration: BoxDecoration(
                         color: isDarkMode ? Colors.black38 : Colors.white,
                         borderRadius: BorderRadius.circular(16.0),
                         border: Border.all(
-                          color: Colors.black,
+                          color: Colors.green,
                           width: 2.0,
                         ),
                       ),
@@ -374,10 +401,10 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
                                           return Table(
                                             border: TableBorder.all(),
                                             columnWidths: {
-                                              0: FixedColumnWidth(120),
-                                              1: FixedColumnWidth(120),
+                                              0: FixedColumnWidth(tableWidth),
+                                              1: FixedColumnWidth(tableWidth),
                                               2: FixedColumnWidth(80),
-                                              3: FixedColumnWidth(100),
+                                              3: FixedColumnWidth(tableWidth),
                                             },
                                             children: [
                                               TableRow(
@@ -424,8 +451,8 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
                                                         alignment: Alignment.center,
                                                         child: Text(
                                                           data.containsKey('amount')
-                                                              ? '\$${data['amount']}'
-                                                              : (data.containsKey('amountPaid') ? '\$${data['amountPaid']}' : 'Not available'),
+                                                              ? '\₱${data['amount']}'
+                                                              : (data.containsKey('amountPaid') ? '\₱${data['amountPaid']}' : 'Not available'),
                                                         ),
                                                       ),
                                                     ),
@@ -571,6 +598,9 @@ class _IncomeAdminPageState extends State<IncomeAdminPage> {
               ),
             ),
           ),
+    ),
+            ),
+            ),
           Positioned(
             top: 60,
             left: 16,

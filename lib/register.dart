@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/gestures.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,8 +55,11 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   String? _selectedUserType;
+  bool _isChecked = false;
 
   PlatformFile? _selectedFile;
+
+
 
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? selectedDate = await showDatePicker(
@@ -275,10 +279,22 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
+  final FocusNode _emailFocusNode = FocusNode();
+  final FocusNode _passwordFocusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
+    _emailFocusNode.addListener(() {
+
+      setState(() {
+      });
+    });
+    _passwordFocusNode.addListener(() {
+
+      setState(() {
+      });
+    });
     _phoneController.addListener(() {
       if (_phoneController.text.isNotEmpty &&
           !_phoneController.text.startsWith('09')) {
@@ -288,6 +304,14 @@ class _RegisterPageState extends State<RegisterPage> {
       }
     });
   }
+
+  @override
+  void dispose() {
+    _emailFocusNode.dispose();
+    _passwordFocusNode.dispose();
+    super.dispose();
+  }
+
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
@@ -314,38 +338,68 @@ class _RegisterPageState extends State<RegisterPage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Expanded(
-                          child: TextFormField(
-                            controller: _firstNameController,
-                            decoration: const InputDecoration(
-                              labelText: 'Enter first name',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.all(Radius.circular(30)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              TextFormField(
+                                controller: _firstNameController,
+                                maxLines: null,
+                                decoration: const InputDecoration(
+                                  labelText: 'Enter first name',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.all(Radius.circular(30)),
+                                  ),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Please enter your first name';
+                                  }
+                                  return null;
+                                },
                               ),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your first name';
-                              }
-                              return null;
-                            },
+                              SizedBox(height: 8),
+                              if (_firstNameController.text.isNotEmpty)
+                                Container(
+                                  padding: EdgeInsets.all(8),
+                                  child: Text(
+                                    _firstNameController.text,
+                                    style: TextStyle(color: Colors.black),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
-                          child: TextFormField(
-                            controller: _lastNameController,
-                            decoration: const InputDecoration(
-                              labelText: 'Enter last name',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.all(Radius.circular(30)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              TextFormField(
+                                controller: _lastNameController,
+                                maxLines: null, // Enable wrapping for multi-line input
+                                decoration: const InputDecoration(
+                                  labelText: 'Enter last name',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.all(Radius.circular(30)),
+                                  ),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Please enter your last name';
+                                  }
+                                  return null;
+                                },
                               ),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your last name';
-                              }
-                              return null;
-                            },
+                              SizedBox(height: 8),
+                              if (_lastNameController.text.isNotEmpty)
+                                Container(
+                                  padding: EdgeInsets.all(8),
+                                  child: Text(
+                                    _lastNameController.text,
+                                    style: TextStyle(color: Colors.black),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                       ],
@@ -498,26 +552,96 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                         ],
                       ),
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: _emailController,
-                      decoration: const InputDecoration(
-                        labelText: 'Email',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(30)),
-                        ),
+                    SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (_emailFocusNode.hasFocus)
+                            Column(
+                              children: [
+                                Row(
+                                  children: const [
+                                    Icon(
+                                      Icons.info_outline,
+                                      color: Colors.blue,
+                                      size: 16,
+                                    ),
+                                    SizedBox(width: 5),
+                                    Flexible(
+                                      child: Text(
+                                        'This should be a legitimate email since this is where the OTP will be sent',
+                                        style: TextStyle(color: Colors.blue, fontSize: 12),
+                                        maxLines: null,
+                                        overflow: TextOverflow.visible,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          // TextFormField for email
+                          TextFormField(
+                            controller: _emailController,
+                            focusNode: _emailFocusNode,
+                            maxLines: null,
+                            decoration: const InputDecoration(
+                              labelText: 'Email',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.all(Radius.circular(30)),
+                              ),
+                            ),
+                            keyboardType: TextInputType.emailAddress,
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter your email';
+                              }
+                              return null;
+                            },
+                          ),
+                          SizedBox(height: 8),
+                          if (_emailController.text.isNotEmpty)
+                            Container(
+                              padding: EdgeInsets.all(8),
+                              child: Text(
+                                _emailController.text,
+                                style: TextStyle(color: Colors.black),
+                              ),
+                            ),
+                        ],
                       ),
-                      keyboardType: TextInputType.emailAddress,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter your email';
-                        }
-                        return null;
-                      },
                     ),
+
                     const SizedBox(height: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Show info message when the email field is focused
+                        if (_passwordFocusNode.hasFocus)
+                          Column(
+                            children: [
+                              Row(
+                                children: const [
+                                  Icon(
+                                    Icons.info_outline,
+                                    color: Colors.blue,
+                                    size: 16,
+                                  ),
+                                  SizedBox(width: 5),
+                                  Flexible(
+                                    child: Text(
+                                      'Password must contain at least one uppercase letter, one number, and one symbol',
+                                      style: TextStyle(color: Colors.blue, fontSize: 12),
+                                      maxLines: null, // Allow unlimited lines for wrapping
+                                      overflow: TextOverflow.visible, // Ensure overflowed text is visible
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                     TextFormField(
                       controller: _passwordController,
+                      focusNode: _passwordFocusNode,
                       obscureText: !_isPasswordVisible,
                       decoration: InputDecoration(
                         labelText: 'Password',
@@ -545,6 +669,8 @@ class _RegisterPageState extends State<RegisterPage> {
                         }
                         return null;
                       },
+                    ),
+                      ],
                     ),
                     const SizedBox(height: 10),
                     TextFormField(
@@ -577,6 +703,95 @@ class _RegisterPageState extends State<RegisterPage> {
                       },
                     ),
                     const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: _isChecked,
+                          onChanged: (bool? newValue) {
+                            setState(() {
+                              _isChecked = newValue ?? false;
+                            });
+                          },
+                        ),
+                        RichText(
+                          text: TextSpan(
+                            text: 'I agree to the ',
+                            style: TextStyle(color: Colors.black),
+                            children: [
+                              TextSpan(
+                                text: 'terms and conditions',
+                                style: TextStyle(color: Colors.blue),
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () {
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) {
+                                        return AlertDialog(
+                                          title: Text('Terms and Conditions'),
+                                          content: SingleChildScrollView(
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(8.0),
+                                              child: Text(
+                                                '''
+Last Updated: January 2025
+Welcome to FitTrack! These Terms and Conditions govern your use of the FitTrack mobile application (the "App") provided by FitTrack. By using our App, you agree to comply with and be bound by these Terms.
+
+1. **Acceptance of Terms**
+By accessing or using the App, you agree to these Terms, as well as our Privacy Policy. If you do not agree with these Terms, please do not use the App.
+
+2. **User Registration and Account**
+To use certain features of the App, you may need to create an account and provide personal information. You agree to provide accurate, current, and complete information during the registration process and to update it as necessary. You are responsible for safeguarding your login credentials and all activities that occur under your account.
+
+3. **Personal Information**
+FitTrack collects and stores personal information such as your name, email address, phone number, age, birthday, and user type (e.g., student or faculty). This information is used to personalize your experience and provide the services offered through the App.
+
+By using the App, you consent to the collection, use, and storage of your personal information in accordance with our Privacy Policy. We will take reasonable precautions to protect your personal data, but we cannot guarantee the security of your information.
+
+4. **Use of the App**
+You agree to use the App only for lawful purposes and in accordance with these Terms. You may not:
+- Use the App in any way that could damage, disable, or impair the App.
+- Attempt to gain unauthorized access to the App, other user accounts, or systems.
+- Use the App to transmit any harmful or illegal content, including malware or viruses.
+
+5. **Data Retention and Access**
+FitTrack may retain your personal information as long as your account is active or as needed to provide you with the services. You can request to delete your account and personal information by contacting us through the App or email.
+
+6. **Third-Party Links and Content**
+The App may contain links to third-party websites or services that are not operated by FitTrack. We are not responsible for the content, privacy policies, or practices of third-party services. We recommend reviewing the terms and privacy policies of third-party services before using them.
+
+7. **Changes to Terms**
+FitTrack reserves the right to modify these Terms at any time. When we make changes, we will update the "Last Updated" date at the top of these Terms. Your continued use of the App after changes to the Terms constitutes your acceptance of the new Terms.
+
+8. **Limitation of Liability**
+To the extent permitted by law, FitTrack will not be liable for any damages arising out of or in connection with your use of the App, including any errors, omissions, or interruptions in the services.
+
+9. **Termination**
+FitTrack reserves the right to suspend or terminate your account at any time if we believe you have violated these Terms or engaged in illegal activities. Upon termination, your access to the App will be revoked, but you may still be liable for any outstanding obligations.
+
+10. **Contact Us**
+If you have any questions about these Terms or the App, contact us through our Facebook page: FitTrack CCAT.
+''',
+                                              ),
+                                            ),
+                                          ),
+                                          actions: <Widget>[
+                                            TextButton(
+                                              onPressed: () {
+                                                Navigator.of(context).pop();
+                                              },
+                                              child: Text('Close'),
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                    );
+                                  },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                     Text(
                       errorMessage,
                       style: const TextStyle(color: Colors.red),
@@ -587,20 +802,25 @@ class _RegisterPageState extends State<RegisterPage> {
                         child: CircularProgressIndicator(),
                       )
                     else
-                    ElevatedButton(
-                      onPressed: () async {
-                        if (_formKey.currentState?.validate() == true) {
-                          register();
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
+                      ElevatedButton(
+                        onPressed: () async {
+                          if (_formKey.currentState?.validate() == true && _isChecked) {
+                            register();
+                          } else if (!_isChecked) {
+                            // Show a message if the terms are not checked
+                            setState(() {
+                              errorMessage = 'Please agree to the terms and conditions';
+                            });
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                        ),
+                        child: const Text(
+                          'Register',
+                          style: TextStyle(color: Colors.white),
+                        ),
                       ),
-                      child: const Text(
-                        'Register',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
                     const SizedBox(height: 10),
                     RichText(
                       text: TextSpan(

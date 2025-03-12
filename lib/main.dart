@@ -78,7 +78,14 @@ class _SplashPageState extends State<OpeningPage> {
 
   Future<void> readSecureData() async {
     try {
-      // Try reading the stored value (which may cause decryption issues)
+      // Check if the user is logged in
+      var user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        print("No user is logged in.");
+        return;
+      }
+
+      // User is logged in, proceed with reading the secure data
       String? value = await storage.read(key: 'isRemembered');
       if (value != null) {
         print("Successfully retrieved secure data: $value");
@@ -95,6 +102,7 @@ class _SplashPageState extends State<OpeningPage> {
       }
     }
   }
+
 
 
   Future<void> _showLoggedInSnackbar() async {

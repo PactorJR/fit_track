@@ -8,6 +8,7 @@ import 'firebase_options.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'theme_provider.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,7 +40,20 @@ class _CashInPageState extends State<CashInPage> {
   User? _user;
   DocumentSnapshot? _userData;
   String? _qrData;
+  late Timer _cashTimer;
 
+  @override
+  void dispose() {
+    _cashTimer.cancel();
+    super.dispose();
+  }
+
+  void _startCashTimer() {
+    _cashTimer = Timer.periodic(Duration(seconds: 3), (timer) {
+      _fetchUserData();
+      print("every 3 seconds");
+    });
+  }
 
   @override
   void initState() {
@@ -48,6 +62,7 @@ class _CashInPageState extends State<CashInPage> {
     if (_user != null) {
       _fetchUserData();
       _generateQRCode();
+      _startCashTimer();
     }
   }
   bool _isLoading = true;
@@ -157,7 +172,7 @@ class _CashInPageState extends State<CashInPage> {
                       width: containerWidth,
                       padding: const EdgeInsets.symmetric(vertical: 15.0, horizontal: 15.0),
                       decoration: BoxDecoration(
-                        color: isDarkMode ? Colors.black : Colors.green.shade800.withOpacity(0.8),
+                        color: isDarkMode ? Colors.black38 : Colors.green.shade800.withOpacity(0.8),
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
@@ -291,7 +306,7 @@ class _CashInPageState extends State<CashInPage> {
                           height: QRcontainerHeight,
                           padding: const EdgeInsets.all(20.0),
                           decoration: BoxDecoration(
-                            color: isDarkMode ? Colors.black : Colors.green
+                            color: isDarkMode ? Colors.black38 : Colors.green
                                 .shade800.withOpacity(0.8),
                             borderRadius: BorderRadius.circular(20),
                             boxShadow: [

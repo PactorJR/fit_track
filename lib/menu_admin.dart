@@ -180,7 +180,7 @@ class MenuAdminPage extends StatelessWidget {
                     isDarkMode: isDarkMode,
                   ),
                   _buildMenuItem(context, icon: Icons.fitness_center,
-                    label: "Equipments",
+                    label: "Workouts",
                     page: EquipAdminPage(),
                     isDarkMode: isDarkMode,
                   ),
