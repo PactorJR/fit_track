@@ -284,7 +284,7 @@ class _FilesAdminPageState extends State<FilesAdminPage> {
                                 color: isDarkMode ? Colors.black38 : Colors.white,
                                 borderRadius: BorderRadius.circular(16.0),
                                 border: Border.all(
-                                  color: Colors.black,
+                                  color: Colors.green,
                                   width: 2.0,
                                 ),
                               ),

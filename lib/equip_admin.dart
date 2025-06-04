@@ -7,10 +7,10 @@ import 'theme_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:flutter/services.dart';
 
 
 void main() async {
@@ -207,7 +207,7 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
 
         return byteDataWithBg!.buffer.asUint8List();
       } else {
-        throw Exception('No equipment selected');
+        throw Exception('No Workout selected');
       }
     } catch (e) {
       print('Error generating QR code: $e');
@@ -260,6 +260,17 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
     if (selectedEquipId != null) {
       _selectEquipment(selectedEquipId!);
     }
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.landscapeRight,
+      DeviceOrientation.landscapeLeft,
+    ]);
+  }
+
+  @override
+  void dispose() {
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    super.dispose();
   }
 
   void _selectEquipment(String equipId) {
@@ -302,12 +313,12 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
               children: [
                 TextField(
                   controller: titleController,
-                  decoration: InputDecoration(labelText: 'Equipment Title'),
+                  decoration: InputDecoration(labelText: 'Workout Title'),
                 ),
                 SizedBox(height: 8.0),
                 TextField(
                   controller: linkController,
-                  decoration: InputDecoration(labelText: 'Equipment Link'),
+                  decoration: InputDecoration(labelText: 'Workout Link'),
                 ),
                 SizedBox(height: 8.0),
                 GestureDetector(
@@ -388,7 +399,7 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
                 ),
                 SizedBox(width: 8),
                 Text(
-                  'Gym Equipment',
+                  'Workouts',
                   style: TextStyle(
                     color: isDarkMode ? Colors.white : Colors.black,
                     fontWeight: FontWeight.bold,
@@ -398,7 +409,9 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
               ],
             ),
           ),
-          Center(
+    Padding(
+    padding: const EdgeInsets.only(top: 100),
+          child: Center(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: SingleChildScrollView(
@@ -412,8 +425,8 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
                         child: TextField(
                           controller: searchController,
                           decoration: InputDecoration(
-                            labelText: 'Search Equipment',
-                            hintText: 'Enter equipment name',
+                            labelText: 'Search Workout',
+                            hintText: 'Enter Workout name',
                             prefixIcon: Icon(Icons.search),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8.0),
@@ -438,7 +451,7 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
                           color: isDarkMode ? Colors.black38 : Colors.white,
                           borderRadius: BorderRadius.circular(16.0),
                           border: Border.all(
-                            color: Colors.black,
+                            color: Colors.green,
                             width: 2.0,
                           ),
                         ),
@@ -449,7 +462,7 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Text(
-                                'Equipment Information',
+                                'Workout Information',
                                 style: TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.bold,
@@ -479,7 +492,7 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
                                       if (!snapshot.hasData ||
                                           snapshot.data!.docs.isEmpty) {
                                         return Center(
-                                            child: Text('No equipment found.'));
+                                            child: Text('No Workout found.'));
                                       }
 
                                       var filteredDocs = snapshot.data!.docs.where((doc) {
@@ -490,7 +503,7 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
 
                                       if (filteredDocs.isEmpty) {
                                         return Center(
-                                            child: Text('No matching equipment found.'));
+                                            child: Text('No matching Workout found.'));
                                       }
 
                                       return Table(
@@ -504,8 +517,8 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
                                         children: [
                                           TableRow(
                                             children: [
-                                              _headerCell('Equipment Title'),
-                                              _headerCell('Equipment Link'),
+                                              _headerCell('Workout Title'),
+                                              _headerCell('Workout Link'),
                                               _headerCell('Time Created'),
                                               _headerCell('QR Code'),
                                             ],
@@ -562,48 +575,7 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
                                 ),
                               ),
                               SizedBox(height: 20),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _actionButton(
-                                      onPressed: _createEquipment,
-                                      icon: Icons.add,
-                                      label: 'Create',
-                                      color: Colors.green,
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _actionButton(
-                                      onPressed: selectedEquipId?.isNotEmpty ?? false
-                                          ? () => _editEquipment(context)
-                                          : null,
-                                      icon: Icons.edit,
-                                      label: 'Edit',
-                                      color: Colors.blue,
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _actionButton(
-                                      onPressed: selectedEquipId?.isNotEmpty ?? false
-                                          ? () => _showDeleteConfirmationDialog(context)
-                                          : null,
-                                      icon: Icons.delete,
-                                      label: 'Delete',
-                                      color: Colors.red,
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _actionButton(
-                                      onPressed: selectedEquipId?.isNotEmpty ?? false
-                                          ? _downloadEquipmentData
-                                          : null,
-                                      icon: Icons.download,
-                                      label: 'Download',
-                                      color: Colors.orange,
-                                    ),
-                                  ),
-                                ],
-                              )
+
                             ],
                           ),
                         ),
@@ -614,6 +586,7 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
               ),
             ),
           ),
+    ),
           Positioned(
             top: 20,
             left: 16,
@@ -631,6 +604,63 @@ class _EquipAdminPageState extends State<EquipAdminPage> {
           ),
         ],
       ),
+      bottomNavigationBar: BottomNavigationBar(
+            type: BottomNavigationBarType.fixed,
+            backgroundColor: isDarkMode ? Colors.black : Colors.white,
+            selectedItemColor: Colors.green,
+            unselectedItemColor: Colors.grey,
+            selectedLabelStyle: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+            unselectedLabelStyle: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+            items: <BottomNavigationBarItem>[
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.add, color: Colors.green),
+                label: 'Create',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(
+                  Icons.edit,
+                  color: (selectedEquipId?.isNotEmpty ?? false) ? Colors.blue : Colors.grey,
+                ),
+                label: 'Edit',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(
+                  Icons.delete,
+                  color: (selectedEquipId?.isNotEmpty ?? false) ? Colors.red : Colors.grey,
+                ),
+                label: 'Delete',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(
+                  Icons.download,
+                  color: (selectedEquipId?.isNotEmpty ?? false) ? Colors.orange : Colors.grey,
+                ),
+                label: 'Download',
+              ),
+            ],
+            onTap: (int index) {
+              switch (index) {
+                case 0:
+                  _createEquipment();
+                  break;
+                case 1:
+                  if (selectedEquipId?.isNotEmpty ?? false) {
+                    _editEquipment(context);
+                  }
+                  break;
+                case 2:
+                  if (selectedEquipId?.isNotEmpty ?? false) {
+                    _showDeleteConfirmationDialog(context);
+                  }
+                  break;
+                case 3:
+                  if (selectedEquipId?.isNotEmpty ?? false) {
+                    _downloadEquipmentData();
+                  }
+                  break;
+              }
+            },
+          ),
     );
   }
 
@@ -752,19 +782,19 @@ class _CreateEquipmentDialogState extends State<CreateEquipmentDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Create Equipment'),
+      title: Text('Create Workout'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: _titleController,
-              decoration: InputDecoration(labelText: 'Equipment Title'),
+              decoration: InputDecoration(labelText: 'Workout Title'),
             ),
             SizedBox(height: 8.0),
             TextField(
               controller: _linkController,
-              decoration: InputDecoration(labelText: 'Equipment Link'),
+              decoration: InputDecoration(labelText: 'Workout Link'),
             ),
           ],
         ),

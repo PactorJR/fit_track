@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.5.4
+version: 1.5.8
 
 environment:
   sdk: '>=2.18.0 <5.0.0'
@@ -57,6 +57,8 @@ dependencies:
   flutter_background_service: ^5.1.0
   workmanager: ^0.5.2
   flutter_inappwebview: ^6.1.5
+  mailer: ^6.4.1
+  crypto: ^3.0.6
 
   flutter_test:
     sdk: flutter
@@ -111,6 +113,19 @@ flutter:
     - assets/icons/background.png
     - assets/icons/foreground.png
     - assets/icons/monochrome.png
+    - assets/workouts/Abs1.gif
+    - assets/workouts/Abs2.gif
+    - assets/workouts/Abs3.gif
+    - assets/workouts/Back1.gif
+    - assets/workouts/Back2.gif
+    - assets/workouts/Arms1.gif
+    - assets/workouts/Arms2.gif
+    - assets/workouts/Arms3.gif
+    - assets/workouts/Cardio1.gif
+    - assets/workouts/Cardio2.gif
+    - assets/workouts/Chest1.gif
+    - assets/workouts/Chest2.gif
+    - assets/workouts/Chest3.gif
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

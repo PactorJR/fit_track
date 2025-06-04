@@ -23,6 +23,8 @@ class _GraphsAdminPageState extends State<GraphsAdminPage> {
   int activeUsersCount = 0;
   int totalUsersCount = 0;
   int bannedUsersCount = 0;
+  int usersCount = 0;
+  int inUseCount = 0;
   Map<int, int> monthlyIncome = {};
   List<DocumentSnapshot> filteredDocs = [];
   bool _isLoading = true;
@@ -31,6 +33,7 @@ class _GraphsAdminPageState extends State<GraphsAdminPage> {
   @override
   void initState() {
     super.initState();
+    _fetchData();
     hasIncomeData = false;
     fetchLoginCounts();
     fetchTotalIncome();
@@ -38,12 +41,21 @@ class _GraphsAdminPageState extends State<GraphsAdminPage> {
     fetchBannedUsersCount();
     fetchActiveUsersCount();
     fetchUserCounts();
+    fetchUsersCount();
     getDailyCounts().then((counts) {
       setState(() {
         dailyCounts = counts;
       });
     }).catchError((e) {
       print("Error fetching data: $e");
+    });
+  }
+
+  Future<void> _fetchData() async {
+    var data = await fetchUsersCount();
+    setState(() {
+      inUseCount = data['inUseCount'] ?? 0;
+      usersCount = data['users'] ?? 0;
     });
   }
 
@@ -77,12 +89,14 @@ class _GraphsAdminPageState extends State<GraphsAdminPage> {
 
     try {
       await Future.wait([
+        _fetchData(),
         fetchLoginCounts(),
         fetchTotalIncome(),
         fetchMonthlyIncome(),
         fetchBannedUsersCount(),
         fetchActiveUsersCount(),
         fetchUserCounts(),
+        fetchUsersCount(),
         getDailyCounts().then((counts) {
           dailyCounts = counts;
         }),
@@ -108,12 +122,17 @@ class _GraphsAdminPageState extends State<GraphsAdminPage> {
 
     filteredDocs = await FirebaseFirestore.instance
         .collection('users')
-        .where('userStatus', isEqualTo: 'Active')
         .get()
         .then((snapshot) => snapshot.docs);
 
+    print("Number of fetched users: ${filteredDocs.length}");
+    for (var doc in filteredDocs) {
+      print("User: ${doc['userID']} - Status: ${doc['userStatus']}");
+    }
+
     await generateReport(filteredDocs);
   }
+
 
   String formatDateTime(DateTime dateTime) {
     String year = dateTime.year.toString();
@@ -221,7 +240,7 @@ class _GraphsAdminPageState extends State<GraphsAdminPage> {
   }
 
   Future<void> fetchMonthlyIncome({int? filterYear, int? filterMonth}) async {
-    Map<int, int> incomeByMonth = {};
+    Map<int, int> incomeByMonth = { for (var i = 1; i <= 12; i++) i: 0 }; // Ensure all months exist
     hasIncomeData = false;
 
     QuerySnapshot snapshot = await FirebaseFirestore.instance.collection('cashinlogs').get();
@@ -238,11 +257,7 @@ class _GraphsAdminPageState extends State<GraphsAdminPage> {
         }
       }
 
-      if (incomeByMonth.containsKey(month)) {
-        incomeByMonth[month] = incomeByMonth[month]! + amount;
-      } else {
-        incomeByMonth[month] = amount;
-      }
+      incomeByMonth.update(month, (value) => value + amount, ifAbsent: () => amount);
     }
 
     for (var guestDoc in guestsSnapshot.docs) {
@@ -256,123 +271,78 @@ class _GraphsAdminPageState extends State<GraphsAdminPage> {
         }
       }
 
-      if (incomeByMonth.containsKey(month)) {
-        incomeByMonth[month] = incomeByMonth[month]! + amountPaid;
-      } else {
-        incomeByMonth[month] = amountPaid;
-      }
-    }
-
-    if (incomeByMonth.isEmpty) {
-      totalIncome = 0;
-      hasIncomeData = false;
-      setState(() {
-        monthlyIncome = {};
-      });
-      return;
+      incomeByMonth.update(month, (value) => value + amountPaid, ifAbsent: () => amountPaid);
     }
 
     totalIncome = incomeByMonth.values.reduce((a, b) => a + b);
-    hasIncomeData = true;
+    hasIncomeData = totalIncome > 0;
 
     setState(() {
-      monthlyIncome = incomeByMonth;
+      monthlyIncome = incomeByMonth; // Store final data
     });
   }
 
+
   Future<void> generateReport(List<DocumentSnapshot> filteredDocs) async {
+    await _requestPermissions();
     try {
       String report = 'User Report\n';
       report += '==========================\n';
 
-      int totalUsersCount = 0;
+      int totalUsersCount = filteredDocs.length;
       int activeUsersCount = 0;
       int bannedUsersCount = 0;
-      double totalIncome = 0;
       List<int> dailyCounts = List.filled(7, 0);
-      List<double?> monthlyIncome = List.filled(12, 0);
+      List<int> monthlyIncomeList = List.filled(12, 0);
 
       for (var doc in filteredDocs) {
-        totalUsersCount++;
-        if (doc['userStatus'] == 'Active') {
-          activeUsersCount++;
-        } else if (doc['userStatus'] == 'Banned') {
-          bannedUsersCount++;
-        }
-        totalIncome += doc['wallet'] ?? 0;
+        if (doc['userStatus'] == 'Active') activeUsersCount++;
+        if (doc['userStatus'] == 'Banned') bannedUsersCount++;
 
         var lastLogin = doc['lastLogin'];
-        String loginDateString = lastLogin is String ? lastLogin : '';
-
         DateTime? loginDate;
-        if (loginDateString == "N/A") {
-          loginDate = null;
-        } else if (lastLogin is Timestamp) {
+        if (lastLogin is Timestamp) {
           loginDate = lastLogin.toDate();
-        } else if (loginDateString.isNotEmpty) {
+        } else if (lastLogin is String && lastLogin.isNotEmpty && lastLogin != "N/A") {
           try {
-            loginDate = DateTime.parse(loginDateString);
+            loginDate = DateTime.parse(lastLogin);
           } catch (e) {
-            print('Invalid date format for lastLogin: $lastLogin');
-            loginDate = DateTime.now();
+            print("Invalid date format for lastLogin: $lastLogin");
           }
-        } else {
-          print('Invalid lastLogin data: $lastLogin');
-          loginDate = DateTime.now();
         }
 
-        String loginDateDisplay = loginDate == null ? "N/A" : loginDate.toString();
-
-        int dayOfWeek = loginDate?.weekday ?? 0;
-        if (dayOfWeek > 0) {
-          dailyCounts[dayOfWeek % 7]++;
+        int dayOfWeek = loginDate?.weekday ?? -1;
+        if (dayOfWeek >= 1 && dayOfWeek <= 7) {
+          dailyCounts[dayOfWeek - 1]++;
         }
 
-        int month = loginDate?.month ?? 0;
-        if (month > 0) {
-          monthlyIncome[month - 1] = (monthlyIncome[month - 1] ?? 0) + (doc['wallet'] ?? 0);
+        int month = loginDate?.month ?? -1;
+        if (month > 0 && month <= 12) {
+          var walletAmount = doc['wallet'];
+          if (walletAmount is num) {
+            monthlyIncomeList[month - 1] += walletAmount.round();
+          }
         }
-
-        String userId = doc['userID'] ?? 'Unknown';
-
-        report += "User: $userId 's Last Login: $loginDateDisplay\n";
       }
 
       report += 'Total Users: $totalUsersCount\n';
       report += 'Active Users: $activeUsersCount\n';
       report += 'Banned Users: $bannedUsersCount\n';
-      report += 'Total Income: \$${totalIncome.toString()}\n';
+      report += 'Total Income: \$${totalIncome.toString()}\n'; // Uses fetched totalIncome
 
       report += '\nDaily Login Counts (Sun-Sat):\n';
-      report += '----------------------------\n';
       List<String> daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       for (int i = 0; i < 7; i++) {
         report += '${daysOfWeek[i]}: ${dailyCounts[i]} logins\n';
       }
 
       report += '\nMonthly Income:\n';
-      report += '----------------\n';
-      for (int i = 0; i < 12; i++) {
-        String monthName = DateTime(2024, i + 1).toString().substring(5, 7);
-        report += '$monthName: \$${monthlyIncome[i] ?? 0}\n';
+      for (int i = 1; i <= 12; i++) {
+        int income = monthlyIncome[i] ?? 0; // Ensure it doesn't crash on missing months
+        report += '${i.toString().padLeft(2, '0')}: \$${income}\n';
       }
 
-      String currentDateTime = formatDateTime(DateTime.now());
-
-      String fitTrackPath = '/storage/emulated/0/FitTrack';
-
-      final fitTrackFolder = Directory(fitTrackPath);
-      if (!await fitTrackFolder.exists()) {
-        await fitTrackFolder.create(recursive: true);
-      }
-
-      final generalReportsFolder = Directory('$fitTrackPath/General Reports');
-      if (!await generalReportsFolder.exists()) {
-        await generalReportsFolder.create(recursive: true);
-      }
-
-      String filePath = '$fitTrackPath/General Reports/GeneralReport_$currentDateTime.txt';
-
+      String filePath = '/storage/emulated/0/FitTrack/General Reports/GeneralReport_${formatDateTime(DateTime.now())}.txt';
       final file = File(filePath);
       await file.writeAsString(report);
 
@@ -381,8 +351,8 @@ class _GraphsAdminPageState extends State<GraphsAdminPage> {
       print('Error generating report: $e');
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error generating report')));
     }
-    await _requestPermissions();
   }
+
 
   void triggerReportGeneration() async {
     await fetchData();
@@ -479,6 +449,7 @@ class _GraphsAdminPageState extends State<GraphsAdminPage> {
                         );
                       },
                       child: Container(
+                        height: 150,
                         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -486,9 +457,8 @@ class _GraphsAdminPageState extends State<GraphsAdminPage> {
                               ? Colors.black38
                               : Colors.white,
                           border: Border.all(
-                            color: Theme.of(context).brightness == Brightness.dark
-                                ? Colors.white
-                                : Colors.black,
+                            width: 3.0,
+                            color: Colors.green,
                           ),
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -511,7 +481,7 @@ class _GraphsAdminPageState extends State<GraphsAdminPage> {
                                   size: Size(MediaQuery.of(context).size.width, 40),
                                   painter: DayHeatmapPainter(
                                     isDarkMode: Theme.of(context).brightness == Brightness.dark,
-                                    dailyCounts: dailyCounts,
+                                    dailyCounts: dailyCounts, usersCount: usersCount, inUseCount: inUseCount,
                                   ),
                                 ),
                               ],
@@ -578,9 +548,8 @@ class _GraphsAdminPageState extends State<GraphsAdminPage> {
                               ? Colors.black38
                               : Colors.white,
                           border: Border.all(
-                            color: Theme.of(context).brightness == Brightness.dark
-                                ? Colors.white
-                                : Colors.black,
+                            width: 3.0,
+                            color: Colors.green,
                           ),
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -666,9 +635,8 @@ class _GraphsAdminPageState extends State<GraphsAdminPage> {
                               ? Colors.black38
                               : Colors.white,
                           border: Border.all(
-                            color: Theme.of(context).brightness == Brightness.dark
-                                ? Colors.white
-                                : Colors.black,
+                            width: 3.0,
+                            color: Colors.green,
                           ),
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -776,9 +744,8 @@ class _GraphsAdminPageState extends State<GraphsAdminPage> {
                               ? Colors.black38
                               : Colors.white,
                           border: Border.all(
-                            color: Theme.of(context).brightness == Brightness.dark
-                                ? Colors.white
-                                : Colors.black,
+                            width: 3.0,
+                            color: Colors.green,
                           ),
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -1340,16 +1307,38 @@ Future<void> showYearMonthPickerIncome(
   );
 }
 
+Future<Map<String, dynamic>> fetchUsersCount() async {
+  var allUsersSnapshot = await FirebaseFirestore.instance.collection('users').get();
+  var activeUsersSnapshot = await FirebaseFirestore.instance
+      .collection('users')
+      .where('loggedStatus', isEqualTo: true)
+      .get();
 
+  int users = allUsersSnapshot.docs.length ?? 0;
+  int inUseCount = activeUsersSnapshot.docs.length ?? 0;
+
+  print("Total Users Count: $users");
+  print("Logged-in Users Count: $inUseCount");
+
+  return {'inUseCount': inUseCount, 'users': users};
+}
 
 class DayHeatmapPainter extends CustomPainter {
   final bool isDarkMode;
   final List<int> dailyCounts;
+  final int usersCount;
+  final int inUseCount;
 
-  DayHeatmapPainter({required this.isDarkMode, required this.dailyCounts});
+  DayHeatmapPainter({
+    required this.isDarkMode,
+    required this.dailyCounts,
+    required this.usersCount,
+    required this.inUseCount,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
+    canvas.translate(0, 30);
     final Paint gridPaint = Paint()
       ..color = Colors.green
       ..strokeWidth = 1;
@@ -1406,13 +1395,79 @@ class DayHeatmapPainter extends CustomPainter {
       dayLabel.layout();
       dayLabel.paint(canvas, Offset(startX + i * columnWidth + columnWidth / 40, size.height + 1));
     }
+    canvas.translate(0, -20);
+    _drawLegend(canvas, size, inUseCount, usersCount);
   }
+
+  void _drawLegend(Canvas canvas, Size size, int inUseCount, int usersCountSafe) {
+    final legendStyle = TextStyle(
+      color: isDarkMode ? Colors.white : Colors.black,
+      fontSize: 14,
+    );
+
+    double legendHeight = 40;
+    double barHeight = 30;
+    double startX = 20;
+    double defaultItemWidth = (size.width - 40) / 3;
+    double usersItemWidth = defaultItemWidth * 1;
+
+    int maxValue = 10;
+    if (inUseCount > maxValue) maxValue = inUseCount;
+    maxValue = (maxValue * 1.2).ceil();
+
+    int usersMaxValue = 100;
+
+    final legendItems = [
+      _LegendItem(color: Colors.yellow, label: "Maximum", count: maxValue),
+      _LegendItem(color: Colors.red, label: "In Use", count: inUseCount),
+      _LegendItem(color: Colors.green, label: "Users", count: usersCountSafe),
+    ];
+
+    for (int i = 0; i < legendItems.length; i++) {
+      final item = legendItems[i];
+
+      double itemWidth = (i == 2) ? usersItemWidth : defaultItemWidth;
+      double barFillWidth = (item.count / (i == 2 ? usersMaxValue : maxValue)) * (itemWidth - 10);
+      barFillWidth = barFillWidth.isNaN ? 0 : barFillWidth;
+
+      final bgPaint = Paint()..color = Colors.grey.withOpacity(0.3);
+      canvas.drawRect(
+          Rect.fromLTWH(startX, size.height - legendHeight, itemWidth - 10, barHeight), bgPaint);
+
+      final fillPaint = Paint()..color = item.color;
+      canvas.drawRect(
+          Rect.fromLTWH(startX, size.height - legendHeight, barFillWidth, barHeight), fillPaint);
+
+      final labelPainter = TextPainter(
+        text: TextSpan(text: "${item.label}: ${item.count}", style: legendStyle),
+        textAlign: TextAlign.center,
+        textDirection: TextDirection.ltr,
+      );
+      labelPainter.layout();
+      labelPainter.paint(canvas, Offset(startX + 5, size.height - legendHeight - 20));
+
+      startX += itemWidth;
+    }
+  }
+
+
 
   @override
   bool shouldRepaint(covariant DayHeatmapPainter oldDelegate) {
     return oldDelegate.dailyCounts != dailyCounts ||
-        oldDelegate.isDarkMode != isDarkMode;
+        oldDelegate.isDarkMode != isDarkMode ||
+        oldDelegate.usersCount != usersCount ||
+        oldDelegate.inUseCount != inUseCount;
   }
+}
+
+
+class _LegendItem {
+  final Color color;
+  final String label;
+  final int count;
+
+  _LegendItem({required this.color, required this.label, required this.count});
 }
 
 Future<List<int>> getDailyCounts({DateTime? startDate, DateTime? endDate}) async {
@@ -1491,8 +1546,6 @@ Future<List<int>> getDailyCounts({DateTime? startDate, DateTime? endDate}) async
   print('Final dailyCounts: $dailyCounts');
   return dailyCounts;
 }
-
-
 
 class IncomeBarPainter extends CustomPainter {
   final Map<int, int> monthlyIncome;

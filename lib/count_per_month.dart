@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'theme_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,6 +55,17 @@ class _CountPerMonthPageState extends State<CountPerMonthPage> {
     if (selectedUserId != null) {
       _selectUser(selectedUserId!);
     }
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.landscapeRight,
+      DeviceOrientation.landscapeLeft,
+    ]);
+  }
+
+  @override
+  void dispose() {
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    super.dispose();
   }
 
   void _selectUser(String userId) {
@@ -178,6 +190,15 @@ class _CountPerMonthPageState extends State<CountPerMonthPage> {
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     bool isDarkMode = themeProvider.isDarkMode;
+    Orientation orientation = MediaQuery.of(context).orientation;
+
+
+    double containerWidth = orientation == Orientation.portrait
+        ? 600
+        : 1000;
+    double tableWidth = orientation == Orientation.portrait
+        ? 120
+        : 200;
     return Scaffold(
       body: Stack(
         children: [
@@ -224,21 +245,27 @@ class _CountPerMonthPageState extends State<CountPerMonthPage> {
           ),
 
 
-          Center(
+            Padding(
+            padding: const EdgeInsets.only(top: 100),
+            child: Center(
+            child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: 600),
+                constraints: BoxConstraints(maxWidth: 800),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
+                      width: containerWidth,
                       height: 600,
                       decoration: BoxDecoration(
                         color: isDarkMode ? Colors.black38 : Colors.white,
                         borderRadius: BorderRadius.circular(16.0),
                         border: Border.all(
-                          color: Colors.black,
+                          color: Colors.green,
                           width: 2.0,
                         ),
                       ),
@@ -358,10 +385,10 @@ class _CountPerMonthPageState extends State<CountPerMonthPage> {
                                       return Table(
                                         border: TableBorder.all(),
                                         columnWidths: {
-                                          0: FixedColumnWidth(120),
-                                          1: FixedColumnWidth(120),
-                                          2: FixedColumnWidth(100),
-                                          3: FixedColumnWidth(120),
+                                          0: FixedColumnWidth(tableWidth),
+                                          1: FixedColumnWidth(tableWidth),
+                                          2: FixedColumnWidth(110),
+                                          3: FixedColumnWidth(tableWidth),
                                         },
                                         children: [
                                           TableRow(
@@ -527,6 +554,9 @@ class _CountPerMonthPageState extends State<CountPerMonthPage> {
               ),
             ),
           ),
+    ),
+            ),
+            ),
           Positioned(
             top: 60,
             left: 16,

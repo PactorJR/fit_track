@@ -400,35 +400,41 @@ class _MyHomePageState extends State<MyHomePage> {
 
     final userId = user!.uid;
 
-    String? isFirstLogin = await storage.read(key: 'isFirstLogin');
-    if (isFirstLogin == null || isFirstLogin == 'true') {
-      await storage.write(key: 'isFirstLogin', value: 'false');
-      return;
-    }
+    try {
+      String? isFirstLogin = await storage.read(key: 'isFirstLogin');
+      if (isFirstLogin == null || isFirstLogin == 'true') {
+        await storage.write(key: 'isFirstLogin', value: 'false');
+        return;
+      }
 
-    if (hasSnackbarShown) {
-      return;
-    }
+      if (hasSnackbarShown) {
+        return;
+      }
 
-    String? rememberMeValue = await storage.read(key: 'isRemembered');
-    if (rememberMeValue == 'true') {
-      DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
-      String firstName = userDoc['firstName'] ?? 'First Name';
-      String lastName = userDoc['lastName'] ?? 'Last Name';
+      String? rememberMeValue = await storage.read(key: 'isRemembered');
+      if (rememberMeValue == 'true') {
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+        String firstName = userDoc['firstName'] ?? 'First Name';
+        String lastName = userDoc['lastName'] ?? 'Last Name';
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("You're logged in the App as $firstName $lastName"),
-          behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 3),
-        ),
-      );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("You're logged in the App as $firstName $lastName"),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 3),
+          ),
+        );
 
-      setState(() {
-        hasSnackbarShown = true;
-      });
+        setState(() {
+          hasSnackbarShown = true;
+        });
+      }
+    } catch (e) {
+      await storage.deleteAll();
+      print("Error occurred in storage: $e");
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -641,6 +647,21 @@ class _HomePageState extends State<HomePage> {
   User? _user;
   DocumentSnapshot? _userData;
   bool _isLoading = true;
+  late Timer _userDataTimer;
+
+
+  @override
+  void dispose() {
+    _userDataTimer.cancel();
+    super.dispose();
+  }
+
+  void _startUserDataTimer() {
+    _userDataTimer = Timer.periodic(Duration(seconds: 2), (timer) {
+      _fetchUserData();
+      print("every 2 seconds");
+    });
+  }
 
   final imagePaths = [
     'assets/images/image1.gif',
@@ -659,6 +680,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    _startUserDataTimer();
     _user = FirebaseAuth.instance.currentUser;
     if (_user != null) {
       _fetchUserData();
@@ -750,7 +772,7 @@ class _HomePageState extends State<HomePage> {
                           vertical: 20.0, horizontal: 24.0),
                       decoration: BoxDecoration(
                         color: isDarkMode
-                            ? Colors.white
+                            ? Colors.black38
                             : Colors.green.shade800.withOpacity(0.8),
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
@@ -949,7 +971,7 @@ class _HomePageState extends State<HomePage> {
                       padding: const EdgeInsets.symmetric(
                           vertical: 20.0, horizontal: 24.0),
                       decoration: BoxDecoration(
-                        color: isDarkMode ? Colors.black : Colors.green.shade800
+                        color: isDarkMode ? Colors.black38 : Colors.green.shade800
                             .withOpacity(0.8),
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [

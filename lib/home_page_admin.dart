@@ -198,9 +198,11 @@ class _MyHomePageState extends State<MyAdminHomePage> {
           String lastName = doc['lastName'] ?? '';
           String userName = '$firstName $lastName';
           String email = doc['email'] ?? '';
-          Timestamp registrationTime = doc['registerTime'];
+          Timestamp? registrationTime = doc['registerTime'];
 
-          String formattedRegistrationTime = DateFormat('yyyy-MM-dd HH:mm:ss').format(registrationTime.toDate());
+          String formattedRegistrationTime = registrationTime?.toDate() != null
+              ? DateFormat('yyyy-MM-dd HH:mm:ss').format(registrationTime!.toDate())
+              : 'Unknown registration time';
 
           String logId = doc.id;
 
@@ -667,13 +669,16 @@ class _HomePageState extends State<HomePage> {
   int bannedUsersCount = 0;
   int totalUsersCount = 0;
   int totalIncome = 0;
+  int usersCount = 0;
   User? _user;
   DocumentSnapshot? _userData;
+  int inUseCount = 0;
 
   @override
   void initState() {
     _user = FirebaseAuth.instance.currentUser;
     super.initState();
+    _fetchData();
     _fetchUserData();
     _fetchAllData();
     fetchLoginCounts();
@@ -689,6 +694,30 @@ class _HomePageState extends State<HomePage> {
     }).catchError((e) {
       print("Error fetching data: $e");
     });
+  }
+
+  Future<void> _fetchData() async {
+    var data = await fetchUsersCount();
+    setState(() {
+      inUseCount = data['inUseCount'] ?? 0;
+      usersCount = data['users'] ?? 0;
+    });
+  }
+
+  Future<Map<String, dynamic>> fetchUsersCount() async {
+    var allUsersSnapshot = await FirebaseFirestore.instance.collection('users').get();
+    var activeUsersSnapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .where('loggedStatus', isEqualTo: true)
+        .get();
+
+    int users = allUsersSnapshot.docs.length ?? 0;
+    int inUseCount = activeUsersSnapshot.docs.length ?? 0;
+
+    print("Total Users Count: $users");
+    print("Logged-in Users Count: $inUseCount");
+
+    return {'inUseCount': inUseCount, 'users': users};
   }
 
   List<DocumentSnapshot> filteredDocs = [];
@@ -717,6 +746,7 @@ class _HomePageState extends State<HomePage> {
 
     try {
       await Future.wait([
+        _fetchData(),
         _fetchUserData(),
         fetchBannedUsersCount(),
         fetchActiveUsersCount(),
@@ -767,6 +797,7 @@ class _HomePageState extends State<HomePage> {
       print("Error fetching active users count: $e");
     }
   }
+
 
   Future<void> fetchUserCounts() async {
     try {
@@ -981,31 +1012,14 @@ class _HomePageState extends State<HomePage> {
     bool isDarkMode = Provider
         .of<ThemeProvider>(context)
         .isDarkMode;
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: themeProvider.isDarkMode
-            ? Colors.white
-            : Colors.green.shade800.withOpacity(0.8),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: themeProvider.isDarkMode
-                ? Colors.white.withOpacity(0.3)
-                : Colors.grey.withOpacity(0.3),
-            spreadRadius: 2,
-            blurRadius: 5,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Container(
+     return Container(
         padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 20.0),
         decoration: BoxDecoration(
           color: themeProvider.isDarkMode
-              ? Colors.black87
+              ? Colors.black
               : Colors.white,
           borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: Colors.green, width: 3.0,),
         ),
         child: Row(
           children: [
@@ -1092,23 +1106,23 @@ class _HomePageState extends State<HomePage> {
                                 'First Name'} ${_userData?.get('lastName') ??
                                 'Last Name'}",
                             style: TextStyle(fontSize: largeFontSize,
-                                fontWeight: FontWeight.bold),
+                                fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : Colors.black),
                           ),
                           Text(
                             "Student ID: ${_userData?.get('userID') ??
                                 'Not available'}",
-                            style: TextStyle(fontSize: mediumFontSize),
+                            style: TextStyle(fontSize: mediumFontSize, color: isDarkMode ? Colors.white : Colors.black),
                           ),
                           Text(
                             "User Type: ${_userData?.get('userType') ??
                                 'Not available'}",
-                            style: TextStyle(fontSize: mediumFontSize),
+                            style: TextStyle(fontSize: mediumFontSize, color: isDarkMode ? Colors.white : Colors.black),
                           ),
                           Text(
                             "Wallet: ₱ ${_userData?.get('wallet') ??
                                 'Not available'}",
                             style: TextStyle(fontSize: mediumFontSize,
-                                fontWeight: FontWeight.bold),
+                                fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : Colors.black),
                           ),
                           Row(
                             children: [
@@ -1116,9 +1130,7 @@ class _HomePageState extends State<HomePage> {
                                 "Status: ",
                                 style: TextStyle(
                                   fontSize: mediumFontSize,
-                                  fontWeight: FontWeight.bold,
-                                  color: isDarkMode ? Colors.white : Colors
-                                      .black,
+                                  fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : Colors.black
                                 ),
                               ),
                               Flexible(
@@ -1146,7 +1158,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ],
         ),
-      ),
     );
   }
 
@@ -1165,7 +1176,9 @@ class _HomePageState extends State<HomePage> {
           child: _buildGraphContainer(
             title: 'CUSTOMER COUNT PER DAY',
             painter: DayHeatmapPainter(
-                isDarkMode: isDarkMode, dailyCounts: dailyCounts),
+                isDarkMode: isDarkMode, dailyCounts: dailyCounts, usersCount: usersCount, inUseCount: inUseCount),
+            height: 80,
+            translateOffset: const Offset(0, -30),
           ),
         ),
         GestureDetector(
@@ -1215,7 +1228,9 @@ class _HomePageState extends State<HomePage> {
   Widget _buildGraphContainer({
     required String title,
     required CustomPainter painter,
+    double height = 80,
     Widget? legend,
+    Offset? translateOffset,
   }) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     bool isDarkMode = themeProvider.isDarkMode;
@@ -1223,56 +1238,46 @@ class _HomePageState extends State<HomePage> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 8),
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: isDarkMode ? Colors.white : Colors.green.shade700,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: themeProvider.isDarkMode
-                ? Colors.white.withOpacity(0.3)
-                : Colors.grey.withOpacity(0.3),
-            spreadRadius: 2,
-            blurRadius: 5,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isDarkMode ? Colors.black87 : Colors.white,
-          border: Border.all(color: Colors.black),
+          border: Border.all(color: Colors.green, width: 3.0,),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: Theme
-                  .of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: isDarkMode ? Colors.white : Colors.black,
+            Center(
+              child: Text(
+                title,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: isDarkMode ? Colors.white : Colors.black,
+                  fontFamily: 'Arial',
+                ),
               ),
             ),
             const SizedBox(height: 10),
-            CustomPaint(
-              size: Size(MediaQuery
-                  .of(context)
-                  .size
-                  .width, 80),
-              painter: painter,
-            ),
+
+            if (translateOffset != null)
+              Transform.translate(
+                offset: translateOffset,
+                child: CustomPaint(
+                  size: Size(double.infinity, height),
+                  painter: painter,
+                ),
+              )
+            else
+              CustomPaint(
+                size: Size(double.infinity, height),
+                painter: painter,
+              ),
+
             if (legend != null) ...[
               const SizedBox(height: 10),
               legend,
             ],
           ],
         ),
-      ),
     );
   }
 

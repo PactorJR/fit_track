@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
 import 'theme_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,6 +44,17 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
     if (selectedUserId != null) {
       _selectUser(selectedUserId!);
     }
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.landscapeRight,
+      DeviceOrientation.landscapeLeft,
+    ]);
+  }
+
+  @override
+  void dispose() {
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    super.dispose();
   }
 
   void _selectUser(String userId) {
@@ -174,6 +186,15 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
   }
 
   Widget build(BuildContext context) {
+    Orientation orientation = MediaQuery.of(context).orientation;
+
+
+    double containerWidth = orientation == Orientation.portrait
+        ? 600
+        : 1000;
+    double tableWidth = orientation == Orientation.portrait
+        ? 100
+        : 200;
     final themeProvider = Provider.of<ThemeProvider>(context);
     bool isDarkMode = themeProvider.isDarkMode;
     return Scaffold(
@@ -217,21 +238,25 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
               ),
             ),
           ),
-          Center(
+            Padding(
+            padding: const EdgeInsets.only(top: 100),
+          child: Center(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
+    child: SingleChildScrollView(
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: 600),
+                constraints: BoxConstraints(maxWidth: 800),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
+                      width: containerWidth,
                       height: 600,
                       decoration: BoxDecoration(
                         color: isDarkMode ? Colors.black38 : Colors.white,
                         borderRadius: BorderRadius.circular(16.0),
                         border: Border.all(
-                          color: Colors.black,
+                          color: Colors.green,
                           width: 2.0,
                         ),
                       ),
@@ -410,10 +435,10 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
                                   return Table(
                                     border: TableBorder.all(),
                                     columnWidths: {
-                                      0: FixedColumnWidth(100),
-                                      1: FixedColumnWidth(100),
+                                      0: FixedColumnWidth(tableWidth),
+                                      1: FixedColumnWidth(tableWidth),
                                       2: FixedColumnWidth(80),
-                                      3: FixedColumnWidth(100),
+                                      3: FixedColumnWidth(tableWidth),
                                     },
                                     children: [
                                       TableRow(
@@ -471,6 +496,7 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
                             ),
                           ),
                         ),
+
                             SizedBox(height: 16),
                             Padding(
                               padding: const EdgeInsets.only(top: 0.0),
@@ -575,6 +601,8 @@ class _CountPerDayPageState extends State<CountPerDayPage> {
               ),
             ),
           ),
+            ),
+            ),
           Positioned(
             top: 60, 
             left: 16,
